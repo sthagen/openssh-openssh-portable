@@ -152,9 +152,11 @@ CFLAGS="$saved_CFLAGS"
 
 if test "$GCC" = "yes" || test "$GCC" = "egcs"; then
 	OSSH_CHECK_CFLAG_COMPILE([-pipe])
-	OSSH_CHECK_CFLAG_COMPILE([-Qunused-arguments])
 	OSSH_CHECK_CFLAG_COMPILE([-Wunknown-warning-option])
+	OSSH_CHECK_CFLAG_COMPILE([-Wno-error=format-truncation])
+	OSSH_CHECK_CFLAG_COMPILE([-Qunused-arguments])
 	OSSH_CHECK_CFLAG_COMPILE([-Wall])
+	OSSH_CHECK_CFLAG_COMPILE([-Wextra])
 	OSSH_CHECK_CFLAG_COMPILE([-Wpointer-arith])
 	OSSH_CHECK_CFLAG_COMPILE([-Wuninitialized])
 	OSSH_CHECK_CFLAG_COMPILE([-Wsign-compare])
@@ -211,20 +213,26 @@ if test "$GCC" = "yes" || test "$GCC" = "egcs"; then
 		CFLAGS="$CFLAGS $t -Werror"
 		LDFLAGS="$LDFLAGS $t -Werror"
 		AC_LINK_IFELSE(
-			[AC_LANG_PROGRAM([[ #include <stdio.h> ]],
+			[AC_LANG_PROGRAM([[
+	#include <stdio.h>
+	int func (int t) {char b[100]; snprintf(b,sizeof b,"%d",t); return t;}
+			 ]],
 			[[
 	char x[256];
-	snprintf(x, sizeof(x), "XXX");
+	snprintf(x, sizeof(x), "XXX%d", func(1));
 			 ]])],
 		    [ AC_MSG_RESULT([yes])
 		      CFLAGS="$saved_CFLAGS $t"
 		      LDFLAGS="$saved_LDFLAGS $t"
 		      AC_MSG_CHECKING([if $t works])
 		      AC_RUN_IFELSE(
-			[AC_LANG_PROGRAM([[ #include <stdio.h> ]],
+			[AC_LANG_PROGRAM([[
+	#include <stdio.h>
+	int func (int t) {char b[100]; snprintf(b,sizeof b,"%d",t); return t;}
+			]],
 			[[
 	char x[256];
-	snprintf(x, sizeof(x), "XXX");
+	snprintf(x, sizeof(x), "XXX%d", func(1));
 			]])],
 			[ AC_MSG_RESULT([yes])
 			  break ],
@@ -374,6 +382,7 @@ AC_CHECK_HEADERS([ \
 	features.h \
 	fcntl.h \
 	floatingpoint.h \
+	fnmatch.h \
 	getopt.h \
 	glob.h \
 	ia.h \
@@ -588,7 +597,6 @@ case "$host" in
 	      #include <fcntl.h> ]
 	)
 	check_for_aix_broken_getaddrinfo=1
-	AC_DEFINE([BROKEN_REALPATH], [1], [Define if you have a broken realpath.])
 	AC_DEFINE([SETEUID_BREAKS_SETUID], [1],
 	    [Define if your platform breaks doing a seteuid before a setuid])
 	AC_DEFINE([BROKEN_SETREUID], [1], [Define if your setreuid() is broken])
@@ -680,6 +688,9 @@ main() { if (NSVersionOfRunTimeLibrary("System") >= (60 << 16))
 	AC_CHECK_LIB([sandbox], [sandbox_apply], [
 	    SSHDLIBS="$SSHDLIBS -lsandbox"
 	])
+	# proc_pidinfo()-based closefrom() replacement.
+	AC_CHECK_HEADERS([libproc.h])
+	AC_CHECK_FUNCS([proc_pidinfo])
 	;;
 *-*-dragonfly*)
 	SSHDLIBS="$SSHDLIBS -lcrypt"
@@ -687,8 +698,10 @@ main() { if (NSVersionOfRunTimeLibrary("System") >= (60 << 16))
 	;;
 *-*-haiku*)
 	LIBS="$LIBS -lbsd "
+	CFLAGS="$CFLAGS -D_BSD_SOURCE"
 	AC_CHECK_LIB([network], [socket])
 	AC_DEFINE([HAVE_U_INT64_T])
+	AC_DEFINE([DISABLE_UTMPX], [1], [no utmpx])
 	MANTYPE=man
 	;;
 *-*-hpux*)
@@ -817,7 +830,7 @@ main() { if (NSVersionOfRunTimeLibrary("System") >= (60 << 16))
 	    AC_DEFINE([SYS_RDOMAIN_LINUX], [1],
 		[Support routing domains using Linux VRF]), [], [
 #ifdef HAVE_SYS_TYPES_H
-# include <sys/types.H>
+# include <sys/types.h>
 #endif
 	    ])
 	AC_CHECK_HEADERS([linux/seccomp.h linux/filter.h linux/audit.h], [],
@@ -948,7 +961,6 @@ mips-sony-bsd|mips-sony-newsos4)
 	conf_wtmp_location=/usr/adm/wtmp
 	maildir=/usr/spool/mail
 	AC_DEFINE([HAVE_NEXT], [1], [Define if you are on NeXT])
-	AC_DEFINE([BROKEN_REALPATH])
 	AC_DEFINE([USE_PIPES])
 	AC_DEFINE([BROKEN_SAVED_UIDS], [1], [Needed for NeXT])
 	;;
@@ -1189,8 +1201,24 @@ mips-sony-bsd|mips-sony-newsos4)
 
 *-*-ultrix*)
 	AC_DEFINE([BROKEN_GETGROUPS], [1], [getgroups(0,NULL) will return -1])
-	AC_DEFINE([NEED_SETPGRP])
+	AC_DEFINE([NEED_SETPGRP], [1], [Need setpgrp to for controlling tty])
 	AC_DEFINE([HAVE_SYS_SYSLOG_H], [1], [Force use of sys/syslog.h on Ultrix])
+	AC_DEFINE([DISABLE_UTMPX], [1], [Disable utmpx])
+	# DISABLE_FD_PASSING so that we call setpgrp as root, otherwise we
+	# don't get a controlling tty.
+	AC_DEFINE([DISABLE_FD_PASSING], [1], [Need to call setpgrp as root])
+	AC_DEFINE([realpath(x, y)], [(sftp_realpath((x),(y)))], [no realpath])
+	# On Ultrix netinet/ip.h is not protected against multiple includes,
+	# so we create our own wrapper and put it where the compiler will
+	# find it.
+	AC_MSG_WARN([creating compat wrapper for netinet/ip.h])
+	mkdir -p netinet
+	cat >netinet/ip.h <<EOD
+#ifndef _SSH_COMPAT_NETINET_IP_H
+#define _SSH_COMPAT_NETINET_IP_H
+#include "/usr/include/netinet/ip.h"
+#endif
+EOD
 	;;
 
 *-*-lynxos)
@@ -1701,6 +1729,9 @@ AC_CHECK_FUNCS([ \
 	Blowfish_expandstate \
 	Blowfish_expand0state \
 	Blowfish_stream2word \
+	SHA256Update \
+	SHA384Update \
+	SHA512Update \
 	asprintf \
 	b64_ntop \
 	__b64_ntop \
@@ -1724,6 +1755,7 @@ AC_CHECK_FUNCS([ \
 	fchown \
 	fchownat \
 	flock \
+	fnmatch \
 	freeaddrinfo \
 	freezero \
 	fstatfs \
@@ -1751,8 +1783,10 @@ AC_CHECK_FUNCS([ \
 	inet_ntop \
 	innetgr \
 	llabs \
+	localtime_r \
 	login_getcapbool \
 	md5_crypt \
+	memmem \
 	memmove \
 	memset_s \
 	mkdtemp \
@@ -1767,6 +1801,7 @@ AC_CHECK_FUNCS([ \
 	raise \
 	readpassphrase \
 	reallocarray \
+	realpath \
 	recvmsg \
 	recallocarray \
 	rresvport_af \
@@ -1864,16 +1899,19 @@ AC_ARG_ENABLE([pkcs11],
 	]
 )
 
-# PKCS11 depends on OpenSSL.
-if test "x$openssl" = "xyes" && test "x$disable_pkcs11" = "x"; then
-	# PKCS#11 support requires dlopen() and co
-	AC_SEARCH_LIBS([dlopen], [dl],
-	    AC_CHECK_DECL([RTLD_NOW],
-		AC_DEFINE([ENABLE_PKCS11], [], [Enable for PKCS#11 support]),
-		[], [#include <dlfcn.h>]
-	    )
-	)
-fi
+disable_sk=
+AC_ARG_ENABLE([security-key],
+	[  --disable-security-key  disable U2F/FIDO support code [no]],
+	[
+		if test "x$enableval" = "xno" ; then
+			disable_sk=1
+		fi
+	]
+)
+
+AC_SEARCH_LIBS([dlopen], [dl])
+AC_CHECK_FUNCS([dlopen])
+AC_CHECK_DECL([RTLD_NOW], [], [], [#include <dlfcn.h>])
 
 # IRIX has a const char return value for gai_strerror()
 AC_CHECK_FUNCS([gai_strerror], [
@@ -2021,32 +2059,6 @@ AC_CHECK_FUNCS([setresgid], [
 			[Define if your setresgid() is broken])
 		 AC_MSG_RESULT([not implemented])],
 		[AC_MSG_WARN([cross compiling: not checking setresuid])]
-	)
-])
-
-AC_CHECK_FUNCS([realpath], [
-	dnl the sftp v3 spec says SSH_FXP_REALPATH will "canonicalize any given
-	dnl path name", however some implementations of realpath (and some
-	dnl versions of the POSIX spec) do not work on non-existent files,
-	dnl so we use the OpenBSD implementation on those platforms.
-	AC_MSG_CHECKING([if realpath works with non-existent files])
-	AC_RUN_IFELSE(
-		[AC_LANG_PROGRAM([[
-#include <limits.h>
-#include <stdlib.h>
-#include <errno.h>
-		]], [[
-		char buf[PATH_MAX];
-		if (realpath("/opensshnonexistentfilename1234", buf) == NULL)
-			if (errno == ENOENT)
-				exit(1);
-		exit(0);
-		]])],
-		[AC_MSG_RESULT([yes])],
-		[AC_DEFINE([BROKEN_REALPATH], [1],
-			[realpath does not work with nonexistent files])
-		 AC_MSG_RESULT([no])],
-		[AC_MSG_WARN([cross compiling: assuming working])]
 	)
 ])
 
@@ -2876,16 +2888,9 @@ if test "x$openssl" = "xyes" ; then
 	fi
 	AC_CHECK_FUNCS([crypt DES_crypt])
 
-	# Search for SHA256 support in libc and/or OpenSSL
-	AC_CHECK_FUNCS([SHA256_Update EVP_sha256], ,
-	    [unsupported_algorithms="$unsupported_algorithms \
-		hmac-sha2-256 \
-		hmac-sha2-512 \
-		diffie-hellman-group-exchange-sha256 \
-		hmac-sha2-256-etm@openssh.com \
-		hmac-sha2-512-etm@openssh.com"
-	     ]
-	)
+	# Check for SHA256, SHA384 and SHA512 support in OpenSSL
+	AC_CHECK_FUNCS([EVP_sha256 EVP_sha384 EVP_sha512])
+
 	# Search for RIPE-MD support in OpenSSL
 	AC_CHECK_FUNCS([EVP_ripemd160], ,
 	    [unsupported_algorithms="$unsupported_algorithms \
@@ -2976,6 +2981,9 @@ if test "x$openssl" = "xyes" ; then
 	    test x$enable_nistp521 = x1; then
 		AC_DEFINE(OPENSSL_HAS_ECC, [1], [OpenSSL has ECC])
 		AC_CHECK_FUNCS([EC_KEY_METHOD_new])
+		openssl_ecc=yes
+	else
+		openssl_ecc=no
 	fi
 	if test x$enable_nistp256 = x1; then
 		AC_DEFINE([OPENSSL_HAS_NISTP256], [1],
@@ -3015,6 +3023,43 @@ else
 	AC_CHECK_LIB([crypt], [crypt], [LIBS="$LIBS -lcrypt"])
 	AC_CHECK_FUNCS([crypt])
 fi
+
+# PKCS11/U2F depend on OpenSSL and dlopen().
+enable_pkcs11=yes
+enable_sk=yes
+if test "x$openssl" != "xyes" ; then
+	enable_pkcs11="disabled; missing libcrypto"
+	enable_sk="disabled; missing libcrypto"
+fi
+if test "x$openssl_ecc" != "xyes" ; then
+	enable_sk="disabled; OpenSSL has no ECC support"
+fi
+if test "x$ac_cv_func_dlopen" != "xyes" ; then
+	enable_pkcs11="disabled; missing dlopen(3)"
+	enable_sk="disabled; missing dlopen(3)"
+fi
+if test "x$ac_cv_have_decl_RTLD_NOW" != "xyes" ; then
+	enable_pkcs11="disabled; missing RTLD_NOW"
+	enable_sk="disabled; missing RTLD_NOW"
+fi
+if test ! -z "$disable_pkcs11" ; then
+	enable_pkcs11="disabled by user"
+fi
+if test ! -z "$disable_sk" ; then
+	enable_sk="disabled by user"
+fi
+
+AC_MSG_CHECKING([whether to enable PKCS11])
+if test "x$enable_pkcs11" = "xyes" ; then
+	AC_DEFINE([ENABLE_PKCS11], [], [Enable for PKCS#11 support])
+fi
+AC_MSG_RESULT([$enable_pkcs11])
+
+AC_MSG_CHECKING([whether to enable U2F])
+if test "x$enable_sk" = "xyes" ; then
+	AC_DEFINE([ENABLE_SK], [], [Enable for U2F/FIDO support])
+fi
+AC_MSG_RESULT([$enable_sk])
 
 AC_CHECK_FUNCS([ \
 	arc4random \
@@ -3561,6 +3606,17 @@ fprint_ll(FILE *f, long long n)
 	)
 fi
 
+AC_CHECK_DECLS([UINT32_MAX], , , [[
+#ifdef HAVE_SYS_LIMITS_H
+# include <sys/limits.h>
+#endif
+#ifdef HAVE_LIMITS_H
+# include <limits.h>
+#endif
+#ifdef HAVE_STDINT_H
+# include <stdint.h>
+#endif
+]])
 
 # More checks for data types
 AC_CACHE_CHECK([for u_int type], ac_cv_have_u_int, [
@@ -3760,7 +3816,7 @@ AC_CHECK_TYPES([fsblkcnt_t, fsfilcnt_t], , , [
 #endif
 ])
 
-AC_CHECK_MEMBERS([struct statfs.f_flags], [], [], [[
+AC_CHECK_MEMBERS([struct statfs.f_files, struct statfs.f_flags], [], [], [[
 #include <sys/types.h>
 #ifdef HAVE_SYS_BITYPES_H
 #include <sys/bitypes.h>
@@ -5255,6 +5311,8 @@ echo "           Translate v4 in v6 hack: $IPV4_IN6_HACK_MSG"
 echo "                  BSD Auth support: $BSD_AUTH_MSG"
 echo "              Random number source: $RAND_MSG"
 echo "             Privsep sandbox style: $SANDBOX_STYLE"
+echo "                   PKCS#11 support: $enable_pkcs11"
+echo "                  U2F/FIDO support: $enable_sk"
 
 echo ""
 

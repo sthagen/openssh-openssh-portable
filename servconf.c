@@ -1,5 +1,5 @@
 
-/* $OpenBSD: servconf.c,v 1.351 2019/04/18 18:56:16 dtucker Exp $ */
+/* $OpenBSD: servconf.c,v 1.353 2019/10/31 21:17:49 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -210,7 +210,7 @@ assemble_algorithms(ServerOptions *o)
 	ASSEMBLE(kex_algorithms, KEX_SERVER_KEX, all_kex);
 	ASSEMBLE(hostkeyalgorithms, KEX_DEFAULT_PK_ALG, all_key);
 	ASSEMBLE(hostbased_key_types, KEX_DEFAULT_PK_ALG, all_key);
-	ASSEMBLE(pubkey_key_types, KEX_DEFAULT_PK_ALG, all_key);
+	ASSEMBLE(pubkey_key_types, PUBKEY_DEFAULT_PK_ALG, all_key);
 	ASSEMBLE(ca_sign_algorithms, SSH_ALLOWED_CA_SIGALGS, all_sig);
 #undef ASSEMBLE
 	free(all_cipher);
@@ -1444,7 +1444,8 @@ process_server_config_line(ServerOptions *options, char *line,
 			fatal("%s line %d: Missing argument.",
 			    filename, linenum);
 		if (*arg != '-' &&
-		    !sshkey_names_valid2(*arg == '+' ? arg + 1 : arg, 1))
+		    !sshkey_names_valid2(*arg == '+' || *arg == '^' ?
+		    arg + 1 : arg, 1))
 			fatal("%s line %d: Bad key types '%s'.",
 			    filename, linenum, arg ? arg : "<NONE>");
 		if (*activep && *charptr == NULL)
@@ -1715,7 +1716,8 @@ process_server_config_line(ServerOptions *options, char *line,
 		arg = strdelim(&cp);
 		if (!arg || *arg == '\0')
 			fatal("%s line %d: Missing argument.", filename, linenum);
-		if (*arg != '-' && !ciphers_valid(*arg == '+' ? arg + 1 : arg))
+		if (*arg != '-' &&
+		    !ciphers_valid(*arg == '+' || *arg == '^' ? arg + 1 : arg))
 			fatal("%s line %d: Bad SSH2 cipher spec '%s'.",
 			    filename, linenum, arg ? arg : "<NONE>");
 		if (options->ciphers == NULL)
@@ -1726,7 +1728,8 @@ process_server_config_line(ServerOptions *options, char *line,
 		arg = strdelim(&cp);
 		if (!arg || *arg == '\0')
 			fatal("%s line %d: Missing argument.", filename, linenum);
-		if (*arg != '-' && !mac_valid(*arg == '+' ? arg + 1 : arg))
+		if (*arg != '-' &&
+		    !mac_valid(*arg == '+' || *arg == '^' ? arg + 1 : arg))
 			fatal("%s line %d: Bad SSH2 mac spec '%s'.",
 			    filename, linenum, arg ? arg : "<NONE>");
 		if (options->macs == NULL)
@@ -1739,7 +1742,8 @@ process_server_config_line(ServerOptions *options, char *line,
 			fatal("%s line %d: Missing argument.",
 			    filename, linenum);
 		if (*arg != '-' &&
-		    !kex_names_valid(*arg == '+' ? arg + 1 : arg))
+		    !kex_names_valid(*arg == '+' || *arg == '^' ?
+		    arg + 1 : arg))
 			fatal("%s line %d: Bad SSH2 KexAlgorithms '%s'.",
 			    filename, linenum, arg ? arg : "<NONE>");
 		if (options->kex_algorithms == NULL)
@@ -2637,7 +2641,7 @@ dump_config(ServerOptions *o)
 	dump_cfg_string(sHostKeyAlgorithms, o->hostkeyalgorithms ?
 	    o->hostkeyalgorithms : KEX_DEFAULT_PK_ALG);
 	dump_cfg_string(sPubkeyAcceptedKeyTypes, o->pubkey_key_types ?
-	    o->pubkey_key_types : KEX_DEFAULT_PK_ALG);
+	    o->pubkey_key_types : PUBKEY_DEFAULT_PK_ALG);
 	dump_cfg_string(sRDomain, o->routing_domain);
 
 	/* string arguments requiring a lookup */

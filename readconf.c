@@ -1,4 +1,4 @@
-/* $OpenBSD: readconf.c,v 1.306 2019/06/12 11:31:50 jmc Exp $ */
+/* $OpenBSD: readconf.c,v 1.310 2019/10/31 21:18:28 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -174,6 +174,7 @@ typedef enum {
 	oStreamLocalBindMask, oStreamLocalBindUnlink, oRevokedHostKeys,
 	oFingerprintHash, oUpdateHostkeys, oHostbasedKeyTypes,
 	oPubkeyAcceptedKeyTypes, oCASignatureAlgorithms, oProxyJump,
+	oSecurityKeyProvider,
 	oIgnore, oIgnoredUnknownOption, oDeprecated, oUnsupported
 } OpCodes;
 
@@ -214,6 +215,7 @@ static struct {
 	{ "smartcarddevice", oUnsupported },
 	{ "pkcs11provider", oUnsupported },
 #endif
+	{ "securitykeyprovider", oSecurityKeyProvider },
 	{ "rsaauthentication", oUnsupported },
 	{ "rhostsrsaauthentication", oUnsupported },
 	{ "compressionlevel", oUnsupported },
@@ -486,6 +488,11 @@ execute_in_shell(const char *cmd)
 	if ((shell = getenv("SHELL")) == NULL)
 		shell = _PATH_BSHELL;
 
+	if (access(shell, X_OK) == -1) {
+		fatal("Shell \"%s\" is not executable: %s",
+		    shell, strerror(errno));
+	}
+
 	/* Need this to redirect subprocess stdin/out */
 	if ((devnull = open(_PATH_DEVNULL, O_RDWR)) == -1)
 		fatal("open(/dev/null): %s", strerror(errno));
@@ -518,7 +525,7 @@ execute_in_shell(const char *cmd)
 		_exit(1);
 	}
 	/* Parent. */
-	if (pid < 0)
+	if (pid == -1)
 		fatal("%s: fork: %.100s", __func__, strerror(errno));
 
 	close(devnull);
@@ -1141,6 +1148,10 @@ parse_char_array:
 		charptr = &options->pkcs11_provider;
 		goto parse_string;
 
+	case oSecurityKeyProvider:
+		charptr = &options->sk_provider;
+		goto parse_string;
+
 	case oProxyCommand:
 		charptr = &options->proxy_command;
 		/* Ignore ProxyCommand if ProxyJump already specified */
@@ -1194,7 +1205,8 @@ parse_int:
 		arg = strdelim(&s);
 		if (!arg || *arg == '\0')
 			fatal("%.200s line %d: Missing argument.", filename, linenum);
-		if (*arg != '-' && !ciphers_valid(*arg == '+' ? arg + 1 : arg))
+		if (*arg != '-' &&
+		    !ciphers_valid(*arg == '+' || *arg == '^' ? arg + 1 : arg))
 			fatal("%.200s line %d: Bad SSH2 cipher spec '%s'.",
 			    filename, linenum, arg ? arg : "<NONE>");
 		if (*activep && options->ciphers == NULL)
@@ -1205,7 +1217,8 @@ parse_int:
 		arg = strdelim(&s);
 		if (!arg || *arg == '\0')
 			fatal("%.200s line %d: Missing argument.", filename, linenum);
-		if (*arg != '-' && !mac_valid(*arg == '+' ? arg + 1 : arg))
+		if (*arg != '-' &&
+		    !mac_valid(*arg == '+' || *arg == '^' ? arg + 1 : arg))
 			fatal("%.200s line %d: Bad SSH2 MAC spec '%s'.",
 			    filename, linenum, arg ? arg : "<NONE>");
 		if (*activep && options->macs == NULL)
@@ -1218,7 +1231,8 @@ parse_int:
 			fatal("%.200s line %d: Missing argument.",
 			    filename, linenum);
 		if (*arg != '-' &&
-		    !kex_names_valid(*arg == '+' ? arg + 1 : arg))
+		    !kex_names_valid(*arg == '+' || *arg == '^' ?
+		    arg + 1 : arg))
 			fatal("%.200s line %d: Bad SSH2 KexAlgorithms '%s'.",
 			    filename, linenum, arg ? arg : "<NONE>");
 		if (*activep && options->kex_algorithms == NULL)
@@ -1233,7 +1247,8 @@ parse_keytypes:
 			fatal("%.200s line %d: Missing argument.",
 			    filename, linenum);
 		if (*arg != '-' &&
-		    !sshkey_names_valid2(*arg == '+' ? arg + 1 : arg, 1))
+		    !sshkey_names_valid2(*arg == '+' || *arg == '^' ?
+		    arg + 1 : arg, 1))
 			fatal("%s line %d: Bad key types '%s'.",
 				filename, linenum, arg ? arg : "<NONE>");
 		if (*activep && *charptr == NULL)
@@ -1897,6 +1912,7 @@ initialize_options(Options * options)
 	options->bind_address = NULL;
 	options->bind_interface = NULL;
 	options->pkcs11_provider = NULL;
+	options->sk_provider = NULL;
 	options->enable_ssh_keysign = - 1;
 	options->no_host_authentication_for_localhost = - 1;
 	options->identities_only = - 1;
@@ -2034,6 +2050,8 @@ fill_default_options(Options * options)
 		add_identity_file(options, "~/", _PATH_SSH_CLIENT_ID_DSA, 0);
 #ifdef OPENSSL_HAS_ECC
 		add_identity_file(options, "~/", _PATH_SSH_CLIENT_ID_ECDSA, 0);
+		add_identity_file(options, "~/",
+		    _PATH_SSH_CLIENT_ID_ECDSA_SK, 0);
 #endif
 		add_identity_file(options, "~/",
 		    _PATH_SSH_CLIENT_ID_ED25519, 0);
@@ -2109,6 +2127,8 @@ fill_default_options(Options * options)
 		options->fingerprint_hash = SSH_FP_HASH_DEFAULT;
 	if (options->update_hostkeys == -1)
 		options->update_hostkeys = 0;
+	if (options->sk_provider == NULL)
+		options->sk_provider = xstrdup("$SSH_SK_PROVIDER");
 
 	/* Expand KEX name lists */
 	all_cipher = cipher_alg_list(',', 0);
@@ -2126,7 +2146,7 @@ fill_default_options(Options * options)
 	ASSEMBLE(macs, KEX_CLIENT_MAC, all_mac);
 	ASSEMBLE(kex_algorithms, KEX_CLIENT_KEX, all_kex);
 	ASSEMBLE(hostbased_key_types, KEX_DEFAULT_PK_ALG, all_key);
-	ASSEMBLE(pubkey_key_types, KEX_DEFAULT_PK_ALG, all_key);
+	ASSEMBLE(pubkey_key_types, PUBKEY_DEFAULT_PK_ALG, all_key);
 	ASSEMBLE(ca_sign_algorithms, SSH_ALLOWED_CA_SIGALGS, all_sig);
 #undef ASSEMBLE
 	free(all_cipher);
@@ -2148,6 +2168,7 @@ fill_default_options(Options * options)
 	CLEAR_ON_NONE(options->control_path);
 	CLEAR_ON_NONE(options->revoked_host_keys);
 	CLEAR_ON_NONE(options->pkcs11_provider);
+	CLEAR_ON_NONE(options->sk_provider);
 	if (options->jump_host != NULL &&
 	    strcmp(options->jump_host, "none") == 0 &&
 	    options->jump_port == 0 && options->jump_user == NULL) {
@@ -2664,6 +2685,7 @@ dump_client_config(Options *o, const char *host)
 #ifdef ENABLE_PKCS11
 	dump_cfg_string(oPKCS11Provider, o->pkcs11_provider);
 #endif
+	dump_cfg_string(oSecurityKeyProvider, o->sk_provider);
 	dump_cfg_string(oPreferredAuthentications, o->preferred_authentications);
 	dump_cfg_string(oPubkeyAcceptedKeyTypes, o->pubkey_key_types);
 	dump_cfg_string(oRevokedHostKeys, o->revoked_host_keys);

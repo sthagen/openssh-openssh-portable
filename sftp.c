@@ -1,4 +1,4 @@
-/* $OpenBSD: sftp.c,v 1.193 2019/06/19 20:12:44 jmc Exp $ */
+/* $OpenBSD: sftp.c,v 1.196 2019/11/01 03:54:33 djm Exp $ */
 /*
  * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
  *
@@ -53,7 +53,6 @@ typedef void EditLine;
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdarg.h>
 
 #ifdef HAVE_UTIL_H
 # include <util.h>
@@ -221,9 +220,12 @@ static const struct CMD cmds[] = {
 static void
 killchild(int signo)
 {
-	if (sshpid > 1) {
-		kill(sshpid, SIGTERM);
-		waitpid(sshpid, NULL, 0);
+	pid_t pid;
+
+	pid = sshpid;
+	if (pid > 1) {
+		kill(pid, SIGTERM);
+		waitpid(pid, NULL, 0);
 	}
 
 	_exit(1);
@@ -2189,7 +2191,7 @@ interactive_loop(struct sftp_conn *conn, char *file1, char *file2)
 		el_set(el, EL_BIND, "^I", "ftp-complete", NULL);
 		/* enable ctrl-left-arrow and ctrl-right-arrow */
 		el_set(el, EL_BIND, "\\e[1;5C", "em-next-word", NULL);
-		el_set(el, EL_BIND, "\\e[5C", "em-next-word", NULL);
+		el_set(el, EL_BIND, "\\e\\e[C", "em-next-word", NULL);
 		el_set(el, EL_BIND, "\\e[1;5D", "ed-prev-word", NULL);
 		el_set(el, EL_BIND, "\\e\\e[D", "ed-prev-word", NULL);
 		/* make ^w match ksh behaviour */

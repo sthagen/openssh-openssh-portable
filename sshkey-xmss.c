@@ -1,4 +1,4 @@
-/* $OpenBSD: sshkey-xmss.c,v 1.4 2019/06/27 18:03:37 deraadt Exp $ */
+/* $OpenBSD: sshkey-xmss.c,v 1.7 2019/10/14 06:00:02 djm Exp $ */
 /*
  * Copyright (c) 2017 Markus Friedl.  All rights reserved.
  *
@@ -473,12 +473,12 @@ sshkey_xmss_get_state(const struct sshkey *k, sshkey_printfn *pr)
 		ret = SSH_ERR_ALLOC_FAIL;
 		goto done;
 	}
-	if ((lockfd = open(lockfile, O_CREAT|O_RDONLY, 0600)) < 0) {
+	if ((lockfd = open(lockfile, O_CREAT|O_RDONLY, 0600)) == -1) {
 		ret = SSH_ERR_SYSTEM_ERROR;
 		PRINT("%s: cannot open/create: %s", __func__, lockfile);
 		goto done;
 	}
-	while (flock(lockfd, LOCK_EX|LOCK_NB) < 0) {
+	while (flock(lockfd, LOCK_EX|LOCK_NB) == -1) {
 		if (errno != EWOULDBLOCK) {
 			ret = SSH_ERR_SYSTEM_ERROR;
 			PRINT("%s: cannot lock: %s", __func__, lockfile);
@@ -613,7 +613,7 @@ sshkey_xmss_update_state(const struct sshkey *k, sshkey_printfn *pr)
 		PRINT("%s: ENCRYPT FAILED: %d", __func__, ret);
 		goto done;
 	}
-	if ((fd = open(nstatefile, O_CREAT|O_WRONLY|O_EXCL, 0600)) < 0) {
+	if ((fd = open(nstatefile, O_CREAT|O_WRONLY|O_EXCL, 0600)) == -1) {
 		ret = SSH_ERR_SYSTEM_ERROR;
 		PRINT("%s: open new state file: %s", __func__, nstatefile);
 		goto done;
@@ -632,13 +632,13 @@ sshkey_xmss_update_state(const struct sshkey *k, sshkey_printfn *pr)
 		close(fd);
 		goto done;
 	}
-	if (fsync(fd) < 0) {
+	if (fsync(fd) == -1) {
 		ret = SSH_ERR_SYSTEM_ERROR;
 		PRINT("%s: sync new state file: %s", __func__, nstatefile);
 		close(fd);
 		goto done;
 	}
-	if (close(fd) < 0) {
+	if (close(fd) == -1) {
 		ret = SSH_ERR_SYSTEM_ERROR;
 		PRINT("%s: close new state file: %s", __func__, nstatefile);
 		goto done;
@@ -652,7 +652,7 @@ sshkey_xmss_update_state(const struct sshkey *k, sshkey_printfn *pr)
 			goto done;
 		}
 	}
-	if (rename(nstatefile, statefile) < 0) {
+	if (rename(nstatefile, statefile) == -1) {
 		ret = SSH_ERR_SYSTEM_ERROR;
 		PRINT("%s: rename %s to %s", __func__, nstatefile, statefile);
 		goto done;
@@ -748,7 +748,7 @@ sshkey_xmss_deserialize_state(struct sshkey *k, struct sshbuf *b)
 	u_int32_t i, lh, node;
 	size_t ls, lsl, la, lk, ln, lr;
 	char *magic;
-	int r;
+	int r = SSH_ERR_INTERNAL_ERROR;
 
 	if (state == NULL)
 		return SSH_ERR_INVALID_ARGUMENT;
@@ -767,9 +767,11 @@ sshkey_xmss_deserialize_state(struct sshkey *k, struct sshbuf *b)
 	    (r = sshbuf_get_string(b, &state->th_nodes, &ln)) != 0 ||
 	    (r = sshbuf_get_string(b, &state->retain, &lr)) != 0 ||
 	    (r = sshbuf_get_u32(b, &lh)) != 0)
-		return r;
-	if (strcmp(magic, SSH_XMSS_K2_MAGIC) != 0)
-		return SSH_ERR_INVALID_ARGUMENT;
+		goto out;
+	if (strcmp(magic, SSH_XMSS_K2_MAGIC) != 0) {
+		r = SSH_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
 	/* XXX check stackoffset */
 	if (ls != num_stack(state) ||
 	    lsl != num_stacklevels(state) ||
@@ -777,8 +779,10 @@ sshkey_xmss_deserialize_state(struct sshkey *k, struct sshbuf *b)
 	    lk != num_keep(state) ||
 	    ln != num_th_nodes(state) ||
 	    lr != num_retain(state) ||
-	    lh != num_treehash(state))
-		return SSH_ERR_INVALID_ARGUMENT;
+	    lh != num_treehash(state)) {
+		r = SSH_ERR_INVALID_ARGUMENT;
+		goto out;
+	}
 	for (i = 0; i < num_treehash(state); i++) {
 		th = &state->treehash[i];
 		if ((r = sshbuf_get_u32(b, &th->h)) != 0 ||
@@ -786,7 +790,7 @@ sshkey_xmss_deserialize_state(struct sshkey *k, struct sshbuf *b)
 		    (r = sshbuf_get_u32(b, &th->stackusage)) != 0 ||
 		    (r = sshbuf_get_u8(b, &th->completed)) != 0 ||
 		    (r = sshbuf_get_u32(b, &node)) != 0)
-			return r;
+			goto out;
 		if (node < num_th_nodes(state))
 			th->node = &state->th_nodes[node];
 	}
@@ -794,7 +798,11 @@ sshkey_xmss_deserialize_state(struct sshkey *k, struct sshbuf *b)
 	xmss_set_bds_state(&state->bds, state->stack, state->stackoffset,
 	    state->stacklevels, state->auth, state->keep, state->treehash,
 	    state->retain, 0);
-	return 0;
+	/* success */
+	r = 0;
+ out:
+	free(magic);
+	return r;
 }
 
 int
@@ -977,7 +985,8 @@ sshkey_xmss_decrypt_state(const struct sshkey *k, struct sshbuf *encoded,
 		goto out;
 	}
 	/* check that an appropriate amount of auth data is present */
-	if (sshbuf_len(encoded) < encrypted_len + authlen) {
+	if (sshbuf_len(encoded) < authlen ||
+	    sshbuf_len(encoded) - authlen < encrypted_len) {
 		r = SSH_ERR_INVALID_FORMAT;
 		goto out;
 	}

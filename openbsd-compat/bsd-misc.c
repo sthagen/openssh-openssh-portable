@@ -172,7 +172,7 @@ fchownat(int fd, const char *path, uid_t owner, gid_t group, int flag)
 		return -1;
 	}
 # ifndef HAVE_FCHOWN
-	return chown(pathname, owner, group);
+	return chown(path, owner, group);
 # else
 #  ifdef O_NOFOLLOW
 	if (flag & AT_SYMLINK_NOFOLLOW)
@@ -203,7 +203,7 @@ fchmodat(int fd, const char *path, mode_t mode, int flag)
 		return -1;
 	}
 # ifndef HAVE_FCHMOD
-	return chown(pathname, owner, group);
+	return chmod(path, mode);
 # else
 #  ifdef O_NOFOLLOW
 	if (flag & AT_SYMLINK_NOFOLLOW)
@@ -424,5 +424,15 @@ int _ssh_compat_fflush(FILE *f)
 		return 0;
 	}
 	return fflush(f);
+}
+#endif
+
+#ifndef HAVE_LOCALTIME_R
+struct tm *
+localtime_r(const time_t *timep, struct tm *result)
+{
+	struct tm *tm = localtime(timep);
+	*result = *tm;
+	return result;
 }
 #endif
