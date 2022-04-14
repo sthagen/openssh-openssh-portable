@@ -1,4 +1,4 @@
-/*	$OpenBSD: sshbuf.c,v 1.13 2018/11/16 06:10:29 djm Exp $	*/
+/*	$OpenBSD: sshbuf.c,v 1.16 2022/04/08 04:40:40 djm Exp $	*/
 /*
  * Copyright (c) 2011 Damien Miller
  *
@@ -42,7 +42,7 @@ sshbuf_check_sanity(const struct sshbuf *buf)
 	    buf->off > buf->size)) {
 		/* Do not try to recover from corrupted buffer internals */
 		SSHBUF_DBG(("SSH_ERR_INTERNAL_ERROR"));
-		signal(SIGSEGV, SIG_DFL);
+		ssh_signal(SIGSEGV, SIG_DFL);
 		raise(SIGSEGV);
 		return SSH_ERR_INTERNAL_ERROR;
 	}
@@ -109,6 +109,8 @@ sshbuf_set_parent(struct sshbuf *child, struct sshbuf *parent)
 	if ((r = sshbuf_check_sanity(child)) != 0 ||
 	    (r = sshbuf_check_sanity(parent)) != 0)
 		return r;
+	if (child->parent != NULL && child->parent != parent)
+		return SSH_ERR_INTERNAL_ERROR;
 	child->parent = parent;
 	child->parent->refcount++;
 	return 0;
@@ -164,8 +166,7 @@ sshbuf_free(struct sshbuf *buf)
 		explicit_bzero(buf->d, buf->alloc);
 		free(buf->d);
 	}
-	explicit_bzero(buf, sizeof(*buf));
-	free(buf);
+	freezero(buf, sizeof(*buf));
 }
 
 void
@@ -178,7 +179,8 @@ sshbuf_reset(struct sshbuf *buf)
 		buf->off = buf->size;
 		return;
 	}
-	(void) sshbuf_check_sanity(buf);
+	if (sshbuf_check_sanity(buf) != 0)
+		return;
 	buf->off = buf->size = 0;
 	if (buf->alloc != SSHBUF_SIZE_INIT) {
 		if ((d = recallocarray(buf->d, buf->alloc, SSHBUF_SIZE_INIT,
@@ -187,7 +189,7 @@ sshbuf_reset(struct sshbuf *buf)
 			buf->alloc = SSHBUF_SIZE_INIT;
 		}
 	}
-	explicit_bzero(buf->d, SSHBUF_SIZE_INIT);
+	explicit_bzero(buf->d, buf->alloc);
 }
 
 size_t
