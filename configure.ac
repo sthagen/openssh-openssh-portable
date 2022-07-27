@@ -16,6 +16,14 @@
 AC_INIT([OpenSSH], [Portable], [openssh-unix-dev@mindrot.org])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([ssh.c])
+
+# Check for stale configure as early as possible.
+for i in $srcdir/configure.ac $srcdir/m4/*.m4; do
+	if test "$i" -nt "$srcdir/configure"; then
+		AC_MSG_ERROR([$i newer than configure, run autoreconf])
+	fi
+done
+
 AC_LANG([C])
 
 AC_CONFIG_HEADERS([config.h])
@@ -1388,18 +1396,21 @@ AC_ARG_WITH([zlib],
 	fi ]
 )
 
+# These libraries are needed for anything that links in the channel code.
+CHANNELLIBS=""
 AC_MSG_CHECKING([for zlib])
 if test "x${zlib}" = "xno"; then
 	AC_MSG_RESULT([no])
 else
-	AC_MSG_RESULT([yes])
-	AC_DEFINE([WITH_ZLIB], [1], [Enable zlib])
+    saved_LIBS="$LIBS"
+    CHANNELLIBS="$CHANNELLIBS -lz"
+    AC_MSG_RESULT([yes])
+    AC_DEFINE([WITH_ZLIB], [1], [Enable zlib])
     AC_CHECK_HEADER([zlib.h], ,[AC_MSG_ERROR([*** zlib.h missing - please install first or check config.log ***])])
-    AC_CHECK_LIB([z], [deflate], ,
+    AC_CHECK_LIB([z], [deflate], [],
 	[
 		saved_CPPFLAGS="$CPPFLAGS"
 		saved_LDFLAGS="$LDFLAGS"
-		save_LIBS="$LIBS"
 		dnl Check default zlib install dir
 		if test -n "${rpath_opt}"; then
 			LDFLAGS="-L/usr/local/lib ${rpath_opt}/usr/local/lib ${saved_LDFLAGS}"
@@ -1407,7 +1418,6 @@ else
 			LDFLAGS="-L/usr/local/lib ${saved_LDFLAGS}"
 		fi
 		CPPFLAGS="-I/usr/local/include ${saved_CPPFLAGS}"
-		LIBS="$LIBS -lz"
 		AC_TRY_LINK_FUNC([deflate], [AC_DEFINE([HAVE_LIBZ])],
 			[
 				AC_MSG_ERROR([*** zlib missing - please install first or check config.log ***])
@@ -1464,6 +1474,7 @@ See http://www.gzip.org/zlib/ for details.])
 	],
 	[	AC_MSG_WARN([cross compiling: not checking zlib version]) ]
     )
+    LIBS="$saved_LIBS"
 fi
 
 dnl UnixWare 2.x
@@ -2699,8 +2710,10 @@ AC_ARG_WITH([ssl-engine],
 	]
 )
 
+nocrypto_saved_LIBS="$LIBS"
 if test "x$openssl" = "xyes" ; then
 	LIBS="-lcrypto $LIBS"
+	CHANNELLIBS="-lcrypto $CHANNELLIBS"
 	AC_TRY_LINK_FUNC([RAND_add], ,
 	    [AC_MSG_ERROR([*** working libcrypto not found, check config.log])])
 	AC_CHECK_HEADER([openssl/opensslv.h], ,
@@ -2871,7 +2884,6 @@ if test "x$openssl" = "xyes" ; then
 		],
 		[
 			AC_MSG_RESULT([no])
-			saved_LIBS="$LIBS"
 			LIBS="$LIBS -ldl"
 			AC_MSG_CHECKING([if programs using OpenSSL need -ldl])
 			AC_LINK_IFELSE(
@@ -2879,10 +2891,10 @@ if test "x$openssl" = "xyes" ; then
 				[[ ERR_load_crypto_strings(); ]])],
 				[
 					AC_MSG_RESULT([yes])
+					CHANNELLIBS="$CHANNELLIBS -ldl"
 				],
 				[
 					AC_MSG_RESULT([no])
-					LIBS="$saved_LIBS"
 				]
 			)
 		]
@@ -3221,26 +3233,6 @@ AC_CHECK_FUNCS([ \
 	arc4random_stir \
 	arc4random_uniform \
 ])
-
-saved_LIBS="$LIBS"
-AC_CHECK_LIB([iaf], [ia_openinfo], [
-	LIBS="$LIBS -liaf"
-	AC_CHECK_FUNCS([set_id], [SSHDLIBS="$SSHDLIBS -liaf"
-				AC_DEFINE([HAVE_LIBIAF], [1],
-			[Define if system has libiaf that supports set_id])
-				])
-])
-LIBS="$saved_LIBS"
-
-# Check for crypt() in libcrypt.  If we have it, we only need it for sshd.
-saved_LIBS="$LIBS"
-AC_CHECK_LIB([crypt], [crypt], [
-	LIBS="-lcrypt $LIBS"
-	SSHDLIBS="-lcrypt $SSHDLIBS"
-])
-AC_CHECK_FUNCS([crypt])
-LIBS="$saved_LIBS"
-
 ### Configure cryptographic random number support
 
 # Check whether OpenSSL seeds itself
@@ -3357,6 +3349,26 @@ elif test "x$openssl" = "xno" ; then
 else
 	AC_MSG_ERROR([OpenSSH has no source of random numbers. Please configure OpenSSL with an entropy source or re-run configure using one of the --with-prngd-port or --with-prngd-socket options])
 fi
+LIBS="$nocrypto_saved_LIBS"
+
+saved_LIBS="$LIBS"
+AC_CHECK_LIB([iaf], [ia_openinfo], [
+	LIBS="$LIBS -liaf"
+	AC_CHECK_FUNCS([set_id], [SSHDLIBS="$SSHDLIBS -liaf"
+				AC_DEFINE([HAVE_LIBIAF], [1],
+			[Define if system has libiaf that supports set_id])
+				])
+])
+LIBS="$saved_LIBS"
+
+# Check for crypt() in libcrypt.  If we have it, we only need it for sshd.
+saved_LIBS="$LIBS"
+AC_CHECK_LIB([crypt], [crypt], [
+	LIBS="-lcrypt $LIBS"
+	SSHDLIBS="-lcrypt $SSHDLIBS"
+])
+AC_CHECK_FUNCS([crypt])
+LIBS="$saved_LIBS"
 
 # Check for PAM libs
 PAM_MSG="no"
@@ -4778,6 +4790,7 @@ AC_ARG_WITH([kerberos5],
 )
 AC_SUBST([GSSLIBS])
 AC_SUBST([K5LIBS])
+AC_SUBST([CHANNELLIBS])
 
 # Looking for programs, paths and files
 
