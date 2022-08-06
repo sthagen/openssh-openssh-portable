@@ -1879,6 +1879,7 @@ AC_CHECK_FUNCS([ \
 	futimes \
 	getaddrinfo \
 	getcwd \
+	getentropy \
 	getgrouplist \
 	getline \
 	getnameinfo \
@@ -2110,7 +2111,7 @@ AC_CHECK_DECLS([O_NONBLOCK], , ,
 #endif
 	])
 
-AC_CHECK_DECLS([ftruncate], , ,
+AC_CHECK_DECLS([ftruncate, getentropy], , ,
 	[
 #include <sys/types.h>
 #include <unistd.h>
@@ -3222,6 +3223,7 @@ if test "x$enable_sk" = "xyes" -a "x$enable_sk_internal" != "xno" ; then
 			fido_dev_get_touch_begin \
 			fido_dev_get_touch_status \
 			fido_dev_supports_cred_prot \
+			fido_dev_is_winhello \
 		])
 		LIBS="$saved_LIBS"
 	fi

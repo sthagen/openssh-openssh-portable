@@ -381,6 +381,14 @@ fido_assert_set_clientdata(fido_assert_t *assert, const u_char *ptr, size_t len)
 }
 #endif /* HAVE_FIDO_ASSERT_SET_CLIENTDATA */
 
+#ifndef HAVE_FIDO_DEV_IS_WINHELLO
+static bool
+fido_dev_is_winhello(const fido_dev_t *)
+{
+	return false;
+}
+#endif /* HAVE_FIDO_DEV_IS_WINHELLO */
+
 /* Check if the specified key handle exists on a given sk. */
 static int
 sk_try(const struct sk_usbhid *sk, const char *application,
@@ -440,6 +448,15 @@ check_sk_options(fido_dev_t *dev, const char *opt, int *ret)
 
 	if (!fido_dev_is_fido2(dev)) {
 		skdebug(__func__, "device is not fido2");
+		return 0;
+	}
+	/*
+	 * Workaround required up to libfido2 1.10.0.  As soon as 1.11.0
+	 * is released and updated in the Cygwin release, we can drop this.
+	 */
+	if (fido_dev_is_winhello(dev) && strcmp (opt, "uv") == 0) {
+		skdebug(__func__, "device is winhello");
+		*ret = 1;
 		return 0;
 	}
 	if ((info = fido_cbor_info_new()) == NULL) {
@@ -1198,6 +1215,14 @@ sk_sign(uint32_t alg, const uint8_t *data, size_t datalen,
 	    FIDO_OPT_TRUE : FIDO_OPT_FALSE)) != FIDO_OK) {
 		skdebug(__func__, "fido_assert_set_up: %s", fido_strerr(r));
 		goto out;
+	}
+	/*
+	 * WinHello requests the PIN by default.  Make "uv" request explicit
+	 * to allow keys with and without -O verify-required to make sense.
+	 */
+	if (pin == NULL && fido_dev_is_winhello (sk->dev) &&
+	    (r = fido_assert_set_uv(assert, FIDO_OPT_FALSE)) != FIDO_OK) {
+		skdebug(__func__, "fido_assert_set_uv: %s", fido_strerr(r));
 	}
 	if (pin == NULL && (flags & SSH_SK_USER_VERIFICATION_REQD)) {
 		if (check_sk_options(sk->dev, "uv", &internal_uv) < 0 ||
