@@ -70,7 +70,7 @@ int ftruncate(int filedes, off_t length);
 #endif
 
 #if defined(HAVE_DECL_GETENTROPY) && HAVE_DECL_GETENTROPY == 0
-int getentropy(void *, size_t);
+int _ssh_compat_getentropy(void *, size_t);
 #endif
 
 #ifndef HAVE_GETLINE
@@ -341,6 +341,10 @@ void freezero(void *, size_t);
 
 #ifndef HAVE_LOCALTIME_R
 struct tm *localtime_r(const time_t *, struct tm *);
+#endif
+
+#ifndef HAVE_TIMEGM
+time_t timegm(struct tm *);
 #endif
 
 char *xcrypt(const char *password, const char *salt);

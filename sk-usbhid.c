@@ -385,7 +385,7 @@ fido_assert_set_clientdata(fido_assert_t *assert, const u_char *ptr, size_t len)
 static bool
 fido_dev_is_winhello(const fido_dev_t *fdev)
 {
-	return false;
+	return 0;
 }
 #endif /* HAVE_FIDO_DEV_IS_WINHELLO */
 
@@ -448,15 +448,6 @@ check_sk_options(fido_dev_t *dev, const char *opt, int *ret)
 
 	if (!fido_dev_is_fido2(dev)) {
 		skdebug(__func__, "device is not fido2");
-		return 0;
-	}
-	/*
-	 * Workaround required up to libfido2 1.10.0.  As soon as 1.11.0
-	 * is released and updated in the Cygwin release, we can drop this.
-	 */
-	if (fido_dev_is_winhello(dev) && strcmp (opt, "uv") == 0) {
-		skdebug(__func__, "device is winhello");
-		*ret = 1;
 		return 0;
 	}
 	if ((info = fido_cbor_info_new()) == NULL) {
