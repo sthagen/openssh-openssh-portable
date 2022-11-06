@@ -713,7 +713,7 @@ case "$host" in
 	AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <mach-o/dyld.h>
 #include <stdlib.h>
-int main() { if (NSVersionOfRunTimeLibrary("System") >= (60 << 16))
+int main(void) { if (NSVersionOfRunTimeLibrary("System") >= (60 << 16))
 		exit(0);
 	else
 		exit(1);
@@ -1658,7 +1658,7 @@ AC_ARG_WITH(ldns,
 # include <stdint.h>
 #endif
 #include <ldns/ldns.h>
-int main() { ldns_status status = ldns_verify_trusted(NULL, NULL, NULL, NULL); status=LDNS_STATUS_OK; exit(0); }
+int main(void) { ldns_status status = ldns_verify_trusted(NULL, NULL, NULL, NULL); status=LDNS_STATUS_OK; exit(0); }
 			]])
 		],
 			[AC_MSG_RESULT(yes)],
@@ -2373,6 +2373,9 @@ if test ! -z "$check_for_openpty_ctty_bug"; then
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#ifdef HAVE_PTY_H
+# include <pty.h>
+#endif
 #include <sys/fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -2812,7 +2815,7 @@ if test "x$openssl" = "xyes" ; then
 				# OpenSSL 3; we use the 1.1x API
 				CPPFLAGS="$CPPFLAGS -DOPENSSL_API_COMPAT=0x10100000L"
 				;;
-			320*)
+			301*|302*)
 				# OpenSSL development branch; request 1.1x API
 				CPPFLAGS="$CPPFLAGS -DOPENSSL_API_COMPAT=0x10100000L"
 				;;
@@ -4259,7 +4262,7 @@ dnl test snprintf (broken on SCO w/gcc)
 #include <stdlib.h>
 #include <string.h>
 #ifdef HAVE_SNPRINTF
-int main()
+int main(void)
 {
 	char buf[50];
 	char expected_out[50];
@@ -4276,7 +4279,7 @@ int main()
 	exit(0);
 }
 #else
-int main() { exit(0); }
+int main(void) { exit(0); }
 #endif
 		]])], [ true ], [ AC_DEFINE([BROKEN_SNPRINTF]) ],
 		AC_MSG_WARN([cross compiling: Assuming working snprintf()])
@@ -4324,6 +4327,16 @@ AC_CHECK_MEMBER([struct __res_state.retrans], [], [AC_DEFINE([__res_state], [sta
 #include <arpa/nameser.h>
 #include <resolv.h>
 ]])
+
+AC_CHECK_MEMBER([struct sockaddr_in.sin_len],
+    [AC_DEFINE([SOCK_HAS_LEN], [1], [sockaddr_in has sin_len])],
+    [],
+    [AC_LANG_SOURCE([[
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+    ]])]
+)
 
 AC_CACHE_CHECK([for ss_family field in struct sockaddr_storage],
 		ac_cv_have_ss_family_in_struct_ss, [
