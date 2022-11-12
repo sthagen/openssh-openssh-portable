@@ -937,14 +937,10 @@ send_rexec_state(int fd, struct sshbuf *conf)
 	 *		string	filename
 	 *		string	contents
 	 *	}
-	 *	string	rng_seed (if required)
 	 */
 	if ((r = sshbuf_put_stringb(m, conf)) != 0 ||
 	    (r = sshbuf_put_stringb(m, inc)) != 0)
 		fatal_fr(r, "compose config");
-#if defined(WITH_OPENSSL) && !defined(OPENSSL_PRNG_ONLY)
-	rexec_send_rng_seed(m);
-#endif
 	if (ssh_msg_send(fd, 0, m) == -1)
 		error_f("ssh_msg_send failed");
 
@@ -976,10 +972,6 @@ recv_rexec_state(int fd, struct sshbuf *conf)
 	if ((r = sshbuf_get_string(m, &cp, &len)) != 0 ||
 	    (r = sshbuf_get_stringb(m, inc)) != 0)
 		fatal_fr(r, "parse config");
-
-#if defined(WITH_OPENSSL) && !defined(OPENSSL_PRNG_ONLY)
-	rexec_recv_rng_seed(m);
-#endif
 
 	if (conf != NULL && (r = sshbuf_put(conf, cp, len)))
 		fatal_fr(r, "sshbuf_put");
@@ -1580,8 +1572,6 @@ main(int ac, char **av)
 	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
 	sanitise_stdfd();
 
-	seed_rng();
-
 	/* Initialize configuration options to their default values. */
 	initialize_server_options(&options);
 
@@ -1702,6 +1692,8 @@ main(int ac, char **av)
 		closefrom(REEXEC_MIN_FREE_FD);
 	else
 		closefrom(REEXEC_DEVCRYPTO_RESERVED_FD);
+
+	seed_rng();
 
 	/* If requested, redirect the logs to the specified logfile. */
 	if (logfile != NULL)

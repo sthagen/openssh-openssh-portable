@@ -27,6 +27,7 @@ jobs:
           - dfly48
           - dfly58
           - dfly60
+          - dfly62
           - fbsd10
           - fbsd12
           - fbsd13
@@ -59,6 +60,7 @@ jobs:
           - { os: dfly48, configs: pam }
           - { os: dfly58, configs: pam }
           - { os: dfly60, configs: pam }
+          - { os: dfly62, configs: pam }
           - { os: fbsd10, configs: pam }
           - { os: fbsd12, configs: pam }
           - { os: fbsd13, configs: pam }
@@ -74,7 +76,8 @@ jobs:
     steps:
     - name: shutdown VM if running
       run: vmshutdown
-    - uses: actions/checkout@v2
+      working-directory: ${{ runner.temp }}
+    - uses: actions/checkout@main
     - name: autoreconf
       run: autoreconf
     - name: startup VM
@@ -82,7 +85,7 @@ jobs:
     - name: configure
       run: vmrun ./.github/configure.sh ${{ matrix.configs }}
     - name: save config
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@main
       with:
         name: ${{ matrix.os }}-${{ matrix.configs }}-config
         path: config.h
@@ -95,7 +98,7 @@ jobs:
       timeout-minutes: 600
     - name: save logs
       if: failure()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@main
       with:
         name: ${{ matrix.os }}-${{ matrix.configs }}-logs
         path: |
@@ -106,3 +109,4 @@ jobs:
     - name: shutdown VM
       if: always()
       run: vmshutdown
+      working-directory: ${{ runner.temp }}
