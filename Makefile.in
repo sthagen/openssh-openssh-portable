@@ -653,7 +653,8 @@ UNITTESTS_TEST_MISC_OBJS=\
 	regress/unittests/misc/test_convtime.o \
 	regress/unittests/misc/test_argv.o \
 	regress/unittests/misc/test_strdelim.o \
-	regress/unittests/misc/test_hpdelim.o
+	regress/unittests/misc/test_hpdelim.o \
+	regress/unittests/misc/test_ptimeout.o
 
 regress/unittests/misc/test_misc$(EXEEXT): \
     ${UNITTESTS_TEST_MISC_OBJS} \
@@ -722,6 +723,7 @@ unit: regress-unit-binaries
 interop-tests t-exec file-tests: regress-prep regress-binaries $(TARGETS)
 	cd $(srcdir)/regress || exit $$?; \
 	EGREP='@EGREP@' \
+	OPENSSL_BIN='@OPENSSL_BIN@' \
 	$(MAKE) \
 		.CURDIR="$(abs_top_srcdir)/regress" \
 		.OBJDIR="$(BUILDDIR)/regress" \
