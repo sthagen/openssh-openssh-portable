@@ -1,4 +1,4 @@
-/* $OpenBSD: scp.c,v 1.251 2022/12/16 06:52:48 jmc Exp $ */
+/* $OpenBSD: scp.c,v 1.252 2023/01/10 23:22:15 millert Exp $ */
 /*
  * scp - secure remote copy.  This is basically patched BSD rcp which
  * uses ssh to do the data transfer (instead of using rcmd).
@@ -180,7 +180,7 @@ pid_t do_cmd_pid = -1;
 pid_t do_cmd_pid2 = -1;
 
 /* SFTP copy parameters */
-size_t sftp_copy_buflen = 32768; /* XXX NetBSD4 hangs with default value */
+size_t sftp_copy_buflen;
 size_t sftp_nrequests;
 
 /* Needed for sftp */
@@ -279,7 +279,11 @@ int
 do_cmd(char *program, char *host, char *remuser, int port, int subsystem,
     char *cmd, int *fdin, int *fdout, pid_t *pid)
 {
-	int pin[2], pout[2], reserved[2];
+#ifdef USE_PIPES
+	int pin[2], pout[2];
+#else
+	int sv[2];
+#endif
 
 	if (verbose_mode)
 		fmprintf(stderr,
@@ -290,22 +294,14 @@ do_cmd(char *program, char *host, char *remuser, int port, int subsystem,
 	if (port == -1)
 		port = sshport;
 
-	/*
-	 * Reserve two descriptors so that the real pipes won't get
-	 * descriptors 0 and 1 because that will screw up dup2 below.
-	 */
-	if (pipe(reserved) == -1)
+#ifdef USE_PIPES
+	if (pipe(pin) == -1 || pipe(pout) == -1)
 		fatal("pipe: %s", strerror(errno));
-
+#else
 	/* Create a socket pair for communicating with ssh. */
-	if (pipe(pin) == -1)
-		fatal("pipe: %s", strerror(errno));
-	if (pipe(pout) == -1)
-		fatal("pipe: %s", strerror(errno));
-
-	/* Free the reserved descriptors. */
-	close(reserved[0]);
-	close(reserved[1]);
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == -1)
+		fatal("socketpair: %s", strerror(errno));
+#endif
 
 	ssh_signal(SIGTSTP, suspchild);
 	ssh_signal(SIGTTIN, suspchild);
@@ -313,15 +309,30 @@ do_cmd(char *program, char *host, char *remuser, int port, int subsystem,
 
 	/* Fork a child to execute the command on the remote host using ssh. */
 	*pid = fork();
-	if (*pid == 0) {
+	switch (*pid) {
+	case -1:
+		fatal("fork: %s", strerror(errno));
+	case 0:
 		/* Child. */
+#ifdef USE_PIPES
+		if (dup2(pin[0], STDIN_FILENO) == -1 ||
+		    dup2(pout[1], STDOUT_FILENO) == -1) {
+			error("dup2: %s", strerror(errno));
+			_exit(1);
+		}
+		close(pin[0]);
 		close(pin[1]);
 		close(pout[0]);
-		dup2(pin[0], 0);
-		dup2(pout[1], 1);
-		close(pin[0]);
 		close(pout[1]);
-
+#else
+		if (dup2(sv[0], STDIN_FILENO) == -1 ||
+		    dup2(sv[0], STDOUT_FILENO) == -1) {
+			error("dup2: %s", strerror(errno));
+			_exit(1);
+		}
+		close(sv[0]);
+		close(sv[1]);
+#endif
 		replacearg(&args, 0, "%s", program);
 		if (port != -1) {
 			addargs(&args, "-p");
@@ -339,19 +350,24 @@ do_cmd(char *program, char *host, char *remuser, int port, int subsystem,
 
 		execvp(program, args.list);
 		perror(program);
-		exit(1);
-	} else if (*pid == -1) {
-		fatal("fork: %s", strerror(errno));
+		_exit(1);
+	default:
+		/* Parent.  Close the other side, and return the local side. */
+#ifdef USE_PIPES
+		close(pin[0]);
+		close(pout[1]);
+		*fdout = pin[1];
+		*fdin = pout[0];
+#else
+		close(sv[0]);
+		*fdin = sv[1];
+		*fdout = sv[1];
+#endif
+		ssh_signal(SIGTERM, killchild);
+		ssh_signal(SIGINT, killchild);
+		ssh_signal(SIGHUP, killchild);
+		return 0;
 	}
-	/* Parent.  Close the other side, and return the local side. */
-	close(pin[0]);
-	*fdout = pin[1];
-	close(pout[1]);
-	*fdin = pout[0];
-	ssh_signal(SIGTERM, killchild);
-	ssh_signal(SIGINT, killchild);
-	ssh_signal(SIGHUP, killchild);
-	return 0;
 }
 
 /*
