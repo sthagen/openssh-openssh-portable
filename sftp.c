@@ -1,4 +1,4 @@
-/* $OpenBSD: sftp.c,v 1.226 2023/02/27 22:12:40 dtucker Exp $ */
+/* $OpenBSD: sftp.c,v 1.228 2023/03/08 06:21:32 dtucker Exp $ */
 /*
  * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
  *
@@ -217,7 +217,6 @@ static const struct CMD cmds[] = {
 	{ NULL,		-1,		-1,		-1	}
 };
 
-/* ARGSUSED */
 static void
 killchild(int signo)
 {
@@ -232,7 +231,6 @@ killchild(int signo)
 	_exit(1);
 }
 
-/* ARGSUSED */
 static void
 suspchild(int signo)
 {
@@ -244,7 +242,6 @@ suspchild(int signo)
 	kill(getpid(), SIGSTOP);
 }
 
-/* ARGSUSED */
 static void
 cmd_interrupt(int signo)
 {
@@ -256,14 +253,12 @@ cmd_interrupt(int signo)
 	errno = olderrno;
 }
 
-/* ARGSUSED */
 static void
 read_interrupt(int signo)
 {
 	interrupted = 1;
 }
 
-/*ARGSUSED*/
 static void
 sigchld_handler(int sig)
 {
@@ -2002,7 +1997,9 @@ complete_match(EditLine *el, struct sftp_conn *conn, char *remote_path,
 
 	memset(&g, 0, sizeof(g));
 	if (remote != LOCAL) {
-		tmp = make_absolute_pwd_glob(tmp, remote_path);
+		tmp2 = make_absolute_pwd_glob(tmp, remote_path);
+		free(tmp);
+		tmp = tmp2;
 		remote_glob(conn, tmp, GLOB_DOOFFS|GLOB_MARK, NULL, &g);
 	} else
 		glob(tmp, GLOB_DOOFFS|GLOB_MARK, NULL, &g);
