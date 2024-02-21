@@ -33,8 +33,8 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\" $OpenBSD: sshd_config.5,v 1.352 2024/01/10 06:33:13 jmc Exp $
-.Dd $Mdocdate: January 10 2024 $
+.\" $OpenBSD: sshd_config.5,v 1.355 2024/02/21 06:17:29 djm Exp $
+.Dd $Mdocdate: February 21 2024 $
 .Dt SSHD_CONFIG 5
 .Os
 .Sh NAME
@@ -485,7 +485,7 @@ to after authentication.
 At session startup
 .Xr sshd 8
 checks that all components of the pathname are root-owned directories
-which are not writable by any other user or group.
+which are not writable by group or others.
 After the chroot,
 .Xr sshd 8
 changes the working directory to the user's home directory.
@@ -1126,7 +1126,8 @@ DEBUG and DEBUG1 are equivalent.
 DEBUG2 and DEBUG3 each specify higher levels of debugging output.
 Logging with a DEBUG level violates the privacy of users and is not recommended.
 .It Cm LogVerbose
-Specify one or more overrides to LogLevel.
+Specify one or more overrides to
+.Cm LogLevel .
 An override consists of a pattern lists that matches the source file, function
 and line number to force detailed logging for.
 For example, an override pattern of:
@@ -1791,6 +1792,14 @@ implements an in-process SFTP server.
 This may simplify configurations using
 .Cm ChrootDirectory
 to force a different filesystem root on clients.
+It accepts the same command line arguments as
+.Cm sftp-server
+and even though it is in-process, settings such as
+.Cm LogLevel
+or
+.Cm SyslogFacility
+do not apply to it and must be set explicitly via
+command line arguments.
 .Pp
 By default no subsystems are defined.
 .It Cm SyslogFacility
