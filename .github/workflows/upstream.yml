@@ -3,10 +3,11 @@ name: Upstream self-hosted
 on:
   push:
     branches: [ master ]
-    paths: [ '**.c', '**.h', '.github/**' ]
+    paths: [ '**.c', '**.h', '.github/configs', '.github/workflows/upstream.yml' ]
 
 jobs:
   selfhosted:
+    name: "upstream ${{ matrix.target }} ${{ matrix.config }}"
     if: github.repository == 'openssh/openssh-portable-selfhosted'
     runs-on: 'libvirt'
     env:
