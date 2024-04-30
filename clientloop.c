@@ -1,4 +1,4 @@
-/* $OpenBSD: clientloop.c,v 1.403 2024/02/21 05:57:34 djm Exp $ */
+/* $OpenBSD: clientloop.c,v 1.405 2024/04/30 02:14:10 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -1585,7 +1585,7 @@ client_loop(struct ssh *ssh, int have_pty, int escape_char_arg,
 		client_wait_until_can_do_something(ssh, &pfd, &npfd_alloc,
 		    &npfd_active, channel_did_enqueue, &osigset,
 		    &conn_in_ready, &conn_out_ready);
-		if (sigprocmask(SIG_UNBLOCK, &bsigset, &osigset) == -1)
+		if (sigprocmask(SIG_SETMASK, &osigset, NULL) == -1)
 			error_f("osigset sigprocmask: %s", strerror(errno));
 
 		if (quit_pending)
@@ -2442,25 +2442,6 @@ client_global_hostkeys_prove_confirm(struct ssh *ssh, int type,
 }
 
 /*
- * Returns non-zero if the key is accepted by HostkeyAlgorithms.
- * Made slightly less trivial by the multiple RSA signature algorithm names.
- */
-static int
-key_accepted_by_hostkeyalgs(const struct sshkey *key)
-{
-	const char *ktype = sshkey_ssh_name(key);
-	const char *hostkeyalgs = options.hostkeyalgorithms;
-
-	if (key->type == KEY_UNSPEC)
-		return 0;
-	if (key->type == KEY_RSA &&
-	    (match_pattern_list("rsa-sha2-256", hostkeyalgs, 0) == 1 ||
-	    match_pattern_list("rsa-sha2-512", hostkeyalgs, 0) == 1))
-		return 1;
-	return match_pattern_list(ktype, hostkeyalgs, 0) == 1;
-}
-
-/*
  * Handle hostkeys-00@openssh.com global request to inform the client of all
  * the server's hostkeys. The keys are checked against the user's
  * HostkeyAlgorithms preference before they are accepted.
@@ -2504,7 +2485,7 @@ client_input_hostkeys(struct ssh *ssh)
 		debug3_f("received %s key %s", sshkey_type(key), fp);
 		free(fp);
 
-		if (!key_accepted_by_hostkeyalgs(key)) {
+		if (!hostkey_accepted_by_hostkeyalgs(key)) {
 			debug3_f("%s key not permitted by "
 			    "HostkeyAlgorithms", sshkey_ssh_name(key));
 			continue;
