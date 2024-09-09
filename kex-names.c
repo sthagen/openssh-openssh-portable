@@ -1,4 +1,4 @@
-/* $OpenBSD: kex-names.c,v 1.3 2024/09/02 12:13:56 djm Exp $ */
+/* $OpenBSD: kex-names.c,v 1.4 2024/09/09 02:39:57 djm Exp $ */
 /*
  * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.
  *
@@ -82,7 +82,7 @@ static const struct kexalg kexalgs[] = {
 	{ KEX_SNTRUP761X25519_SHA512_OLD, KEX_KEM_SNTRUP761X25519_SHA512, 0,
 	    SSH_DIGEST_SHA512 },
 #endif
-#ifdef WITH_MLKEM
+#ifdef USE_MLKEM768X25519
 	{ KEX_MLKEM768X25519_SHA256, KEX_KEM_MLKEM768X25519_SHA256, 0,
 	    SSH_DIGEST_SHA256 },
 #endif
