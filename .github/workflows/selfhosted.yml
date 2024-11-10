@@ -153,7 +153,7 @@ jobs:
       if: env.SSHFS == 'true' && env.BIGENDIAN == 'true'
       run: |
         set -x
-        vmrun sudo chown -R $LOGNAME ~/$(basename ${GITHUB_WORKSPACE})
+        vmrun sudo chown -R $LOGNAME ~/$(basename ${GITHUB_WORKSPACE}) || true
         vmrun "cd $(basename ${GITHUB_WORKSPACE}/regress) && sudo make clean"
         sshfs_mount regress
         vmrun "sudo mkdir -p $(dirname ${GITHUB_WORKSPACE})"
@@ -180,7 +180,7 @@ jobs:
         echo "#!/bin/sh" >remote_sshd
         echo "exec /usr/bin/ssh ${TARGET_DOMAIN} exec /home/builder/$(basename ${GITHUB_WORKSPACE})/sshd "'$@' >>remote_sshd
         chmod 755 remote_sshd
-        make t-exec TEST_SSH_SSHD=`pwd`/remote_sshd LTESTS="try-ciphers kextype"
+        make t-exec TEST_SSH_SSHD=`pwd`/remote_sshd LTESTS="try-ciphers kextype keytype"
 
     - name: bigendian interop - save logs
       if: failure() && env.BIGENDIAN == 'true'
