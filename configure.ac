@@ -628,6 +628,7 @@ case "$host" in
 	AC_MSG_CHECKING([if compiler allows macro redefinitions])
 	AC_COMPILE_IFELSE(
 	    [AC_LANG_PROGRAM([[
+#include <stdlib.h>
 #define testmacro foo
 #define testmacro bar]],
 	    [[ exit(0); ]])],
@@ -3370,7 +3371,7 @@ if test "x$enable_sk" = "xyes" -a "x$enable_sk_internal" != "xno" ; then
 fi
 
 # Check for standalone SecurityKeyProvider
-AC_MSG_CHECKING([whether to build standlone sk-libfido2])
+AC_MSG_CHECKING([whether to build standalone sk-libfido2])
 if test "x$enable_sk_standalone" = "xyes" ; then
 	AC_MSG_RESULT([yes])
 	AC_SUBST([SK_STANDALONE], [sk-libfido2$SHLIBEXT])
@@ -4407,7 +4408,11 @@ int main(void)
 	long long num = 0x7fffffffffffffffll;
 #endif
 	strcpy(expected_out, "9223372036854775807");
+#if (SIZEOF_LONG_INT == 8)
+	snprintf(buf, mazsize, "%ld", num);
+#else
 	snprintf(buf, mazsize, "%lld", num);
+#endif
 	if(strcmp(buf, expected_out) != 0)
 		exit(1);
 	exit(0);
