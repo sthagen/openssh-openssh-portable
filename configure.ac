@@ -1700,6 +1700,12 @@ AC_RUN_IFELSE(
 	]
 )
 
+AC_CHECK_MEMBERS([struct dirent.d_type], [], [], [[
+#ifdef HAVE_DIRENT_H
+#include <dirent.h>
+#endif
+]])
+
 AC_MSG_CHECKING([for /proc/pid/fd directory])
 if test -d "/proc/$$/fd" ; then
 	AC_DEFINE([HAVE_PROC_PID], [1], [Define if you have /proc/$pid/fd])
@@ -3078,7 +3084,6 @@ if test "x$openssl" = "xyes" ; then
 	AC_CHECK_FUNCS([ \
 		BN_is_prime_ex \
 		DES_crypt \
-		DSA_generate_parameters_ex \
 		EVP_DigestSign \
 		EVP_DigestVerify \
 		EVP_DigestFinal_ex \

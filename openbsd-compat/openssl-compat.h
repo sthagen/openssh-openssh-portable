@@ -24,7 +24,6 @@
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
-#include <openssl/dsa.h>
 #ifdef OPENSSL_HAS_ECC
 #include <openssl/ecdsa.h>
 #endif
@@ -44,9 +43,6 @@ void ssh_libcrypto_init(void);
 
 #ifndef OPENSSL_RSA_MAX_MODULUS_BITS
 # define OPENSSL_RSA_MAX_MODULUS_BITS	16384
-#endif
-#ifndef OPENSSL_DSA_MAX_MODULUS_BITS
-# define OPENSSL_DSA_MAX_MODULUS_BITS	10000
 #endif
 
 #ifdef LIBRESSL_VERSION_NUMBER
