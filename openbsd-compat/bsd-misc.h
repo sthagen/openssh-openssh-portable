@@ -65,6 +65,10 @@ struct timeval {
 int utimes(const char *, struct timeval *);
 #endif /* HAVE_UTIMES */
 
+#ifndef HAVE_DIRFD
+int dirfd(void *);
+#endif
+
 #ifndef AT_FDCWD
 # define AT_FDCWD (-2)
 #endif
