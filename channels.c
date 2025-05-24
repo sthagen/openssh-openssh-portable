@@ -1,4 +1,4 @@
-/* $OpenBSD: channels.c,v 1.442 2024/12/05 06:49:26 dtucker Exp $ */
+/* $OpenBSD: channels.c,v 1.444 2025/05/24 11:41:51 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -4677,8 +4677,7 @@ connect_to_helper(struct ssh *ssh, const char *name, int port, int socktype,
 		 * channel_connect_ctx_free() must check ai_family
 		 * and use free() not freeaddirinfo() for AF_UNIX.
 		 */
-		ai = xmalloc(sizeof(*ai) + sizeof(*sunaddr));
-		memset(ai, 0, sizeof(*ai) + sizeof(*sunaddr));
+		ai = xcalloc(1, sizeof(*ai) + sizeof(*sunaddr));
 		ai->ai_addr = (struct sockaddr *)(ai + 1);
 		ai->ai_addrlen = sizeof(*sunaddr);
 		ai->ai_family = AF_UNIX;
@@ -5010,7 +5009,7 @@ x11_create_display_inet(struct ssh *ssh, int x11_display_offset,
 		return -1;
 
 	for (display_number = x11_display_offset;
-	    display_number < MAX_DISPLAYS;
+	    display_number < x11_display_offset + MAX_DISPLAYS;
 	    display_number++) {
 		port = X11_BASE_PORT + display_number;
 		memset(&hints, 0, sizeof(hints));
@@ -5065,7 +5064,7 @@ x11_create_display_inet(struct ssh *ssh, int x11_display_offset,
 		if (num_socks > 0)
 			break;
 	}
-	if (display_number >= MAX_DISPLAYS) {
+	if (display_number >= x11_display_offset + MAX_DISPLAYS) {
 		error("Failed to allocate internet-domain X11 display socket.");
 		return -1;
 	}
