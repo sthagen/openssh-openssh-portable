@@ -1,4 +1,4 @@
-/* $OpenBSD: clientloop.c,v 1.412 2025/06/17 01:20:17 djm Exp $ */
+/* $OpenBSD: clientloop.c,v 1.414 2025/08/18 03:43:01 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -147,7 +147,8 @@ extern char *forward_agent_sock_path;
  * because this is updated in a signal handler.
  */
 static volatile sig_atomic_t received_window_change_signal = 0;
-static volatile sig_atomic_t received_signal = 0;
+static volatile sig_atomic_t siginfo_received = 0;
+static volatile sig_atomic_t received_signal = 0; /* exit signals */
 
 /* Time when backgrounded control master using ControlPersist should exit */
 static time_t control_persist_exit_time = 0;
@@ -223,6 +224,15 @@ window_change_handler(int sig)
 {
 	received_window_change_signal = 1;
 }
+
+#ifdef SIGINFO
+/* Signal handler for SIGINFO */
+static void
+siginfo_handler(int sig)
+{
+	siginfo_received = 1;
+}
+#endif
 
 /*
  * Signal handler for signals that cause the program to terminate.  These
@@ -965,11 +975,11 @@ client_repledge(void)
 	} else if (options.forward_agent != 0) {
 		/* agent forwarding needs to open $SSH_AUTH_SOCK at will */
 		debug("pledge: agent");
-		if (pledge("stdio unix proc tty", NULL) == -1)
+		if (pledge(PLEDGE_EXTRA_INET "stdio unix proc tty", NULL) == -1)
 			fatal_f("pledge(): %s", strerror(errno));
 	} else {
 		debug("pledge: fork");
-		if (pledge("stdio proc tty", NULL) == -1)
+		if (pledge(PLEDGE_EXTRA_INET "stdio proc tty", NULL) == -1)
 			fatal_f("pledge(): %s", strerror(errno));
 	}
 	/* XXX further things to do:
@@ -1447,7 +1457,7 @@ client_loop(struct ssh *ssh, int have_pty, int escape_char_arg,
 	struct pollfd *pfd = NULL;
 	u_int npfd_alloc = 0, npfd_active = 0;
 	double start_time, total_time;
-	int channel_did_enqueue = 0, r;
+	int interactive = -1, channel_did_enqueue = 0, r;
 	u_int64_t ibytes, obytes;
 	int conn_in_ready, conn_out_ready;
 	sigset_t bsigset, osigset;
@@ -1514,6 +1524,9 @@ client_loop(struct ssh *ssh, int have_pty, int escape_char_arg,
 	if (ssh_signal(SIGTERM, SIG_IGN) != SIG_IGN)
 		ssh_signal(SIGTERM, signal_handler);
 	ssh_signal(SIGWINCH, window_change_handler);
+#ifdef SIGINFO
+	ssh_signal(SIGINFO, siginfo_handler);
+#endif
 
 	if (have_pty)
 		enter_raw_mode(options.request_tty == REQUEST_TTY_FORCE);
@@ -1538,6 +1551,10 @@ client_loop(struct ssh *ssh, int have_pty, int escape_char_arg,
 	    sigaddset(&bsigset, SIGQUIT) == -1 ||
 	    sigaddset(&bsigset, SIGTERM) == -1)
 		error_f("bsigset setup: %s", strerror(errno));
+#ifdef SIGINFO
+	if (sigaddset(&bsigset, SIGINFO) == -1)
+		error_f("bsigset setup: %s", strerror(errno));
+#endif
 
 	/* Main loop of the client for the interactive session mode. */
 	while (!quit_pending) {
@@ -1577,6 +1594,10 @@ client_loop(struct ssh *ssh, int have_pty, int escape_char_arg,
 		 */
 		if (sigprocmask(SIG_BLOCK, &bsigset, &osigset) == -1)
 			error_f("bsigset sigprocmask: %s", strerror(errno));
+		if (siginfo_received) {
+			siginfo_received = 0;
+			channel_report_open(ssh, SYSLOG_LEVEL_INFO);
+		}
 		if (quit_pending)
 			break;
 		client_wait_until_can_do_something(ssh, &pfd, &npfd_alloc,
@@ -1607,6 +1628,12 @@ client_loop(struct ssh *ssh, int have_pty, int escape_char_arg,
 		 * sender.
 		 */
 		if (conn_out_ready) {
+			if (interactive != !channel_has_bulk(ssh)) {
+				interactive = !channel_has_bulk(ssh);
+				debug2_f("session QoS is now %s", interactive ?
+				    "interactive" : "non-interactive");
+				ssh_packet_set_interactive(ssh, interactive);
+			}
 			if ((r = ssh_packet_write_poll(ssh)) != 0) {
 				sshpkt_fatal(ssh, r,
 				    "%s: ssh_packet_write_poll", __func__);
@@ -2691,9 +2718,6 @@ client_session2_setup(struct ssh *ssh, int id, int want_tty, int want_subsystem,
 
 	if ((c = channel_lookup(ssh, id)) == NULL)
 		fatal_f("channel %d: unknown channel", id);
-
-	ssh_packet_set_interactive(ssh, want_tty,
-	    options.ip_qos_interactive, options.ip_qos_bulk);
 
 	if (want_tty) {
 		struct winsize ws;
