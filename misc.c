@@ -30,21 +30,13 @@
 #include <sys/un.h>
 
 #include <limits.h>
-#ifdef HAVE_LIBGEN_H
-# include <libgen.h>
-#endif
-#ifdef HAVE_POLL_H
+#include <libgen.h>
 #include <poll.h>
-#endif
-#ifdef HAVE_NLIST_H
 #include <nlist.h>
-#endif
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
-#ifdef HAVE_STDINT_H
-# include <stdint.h>
-#endif
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -60,11 +52,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
-#ifdef HAVE_PATHS_H
-# include <paths.h>
+#include <paths.h>
 #include <pwd.h>
 #include <grp.h>
-#endif
 #ifdef SSH_TUN_OPENBSD
 #include <net/if.h>
 #endif
@@ -3073,7 +3063,7 @@ ptimeout_isset(struct timespec *pt)
 int
 lib_contains_symbol(const char *path, const char *s)
 {
-#ifdef HAVE_NLIST_H
+#ifdef HAVE_NLIST
 	struct nlist nl[2];
 	int ret = -1, r;
 
@@ -3093,7 +3083,7 @@ lib_contains_symbol(const char *path, const char *s)
  out:
 	free(nl[0].n_name);
 	return ret;
-#else /* HAVE_NLIST_H */
+#else /* HAVE_NLIST */
 	int fd, ret = -1;
 	struct stat st;
 	void *m = NULL;
@@ -3135,7 +3125,7 @@ lib_contains_symbol(const char *path, const char *s)
 		munmap(m, sz);
 	close(fd);
 	return ret;
-#endif /* HAVE_NLIST_H */
+#endif /* HAVE_NLIST */
 }
 
 int

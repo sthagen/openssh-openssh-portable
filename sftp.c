@@ -19,9 +19,7 @@
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
-#ifdef HAVE_SYS_STAT_H
-# include <sys/stat.h>
-#endif
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #ifdef HAVE_SYS_STATVFS_H
@@ -31,12 +29,8 @@
 #include <ctype.h>
 #include <errno.h>
 
-#ifdef HAVE_PATHS_H
-# include <paths.h>
-#endif
-#ifdef HAVE_LIBGEN_H
+#include <paths.h>
 #include <libgen.h>
-#endif
 #ifdef HAVE_LOCALE_H
 # include <locale.h>
 #endif
@@ -53,9 +47,7 @@ typedef void EditLine;
 #include <string.h>
 #include <unistd.h>
 
-#ifdef HAVE_UTIL_H
-# include <util.h>
-#endif
+#include <util.h>
 
 #include "xmalloc.h"
 #include "log.h"
