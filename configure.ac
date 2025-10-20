@@ -3773,6 +3773,24 @@ AC_CHECK_TYPES([nfds_t], , , [
 #endif
 ])
 
+if test "x$ac_cv_type_nfds_t" != "xyes"; then
+	AC_MSG_CHECKING([if poll nfds_t is unsigned long])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <sys/types.h>
+#ifdef HAVE_POLL_H
+#include <poll.h>
+#endif
+#ifdef HAVE_SYS_POLL_H
+#include <sys/poll.h>
+#endif
+	    int poll(struct pollfd *, unsigned long, int timeout);
+	    ]], [[return poll(0, 0, 0);]])],
+	    [AC_MSG_RESULT([yes])
+	     AC_DEFINE(POLL_NFDS_T_ULONG, 1, [Define if poll 2nd arg is ulong])],
+	    [AC_MSG_RESULT([no])]
+	)
+fi
+
 # Decide which sandbox style to use
 sandbox_arg=""
 AC_ARG_WITH([sandbox],
@@ -5807,6 +5825,7 @@ AC_PATH_PROG([DROPBEAR], [dropbear])
 AC_PATH_PROG([DBCLIENT], [dbclient])
 AC_PATH_PROG([DROPBEARKEY], [dropbearkey])
 AC_PATH_PROG([DROPBEARCONVERT], [dropbearconvert])
+AC_PATH_PROG([TMUX], [tmux])
 
 CFLAGS="${CFLAGS} ${CFLAGS_AFTER}"
 LDFLAGS="${LDFLAGS} ${LDFLAGS_AFTER}"
