@@ -1,4 +1,4 @@
-/* $OpenBSD: monitor.c,v 1.249 2025/09/25 06:45:50 djm Exp $ */
+/* $OpenBSD: monitor.c,v 1.251 2025/12/19 00:56:34 djm Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * Copyright 2002 Markus Friedl <markus@openbsd.org>
@@ -155,7 +155,8 @@ static char *auth_submethod = NULL;
 static u_int session_id2_len = 0;
 static u_char *session_id2 = NULL;
 static pid_t monitor_child_pid;
-int auth_attempted = 0;
+static int auth_attempted = 0;
+static int invalid_user = 0;
 
 struct mon_table {
 	enum monitor_reqtype type;
@@ -821,7 +822,7 @@ mm_encode_server_options(struct sshbuf *m)
 		    (r = sshbuf_put_cstring(m, options.x)) != 0) \
 			fatal_fr(r, "assemble %s", #x); \
 	} while (0)
-#define M_CP_STRARRAYOPT(x, nx) do { \
+#define M_CP_STRARRAYOPT(x, nx, clobber) do { \
 		for (i = 0; i < options.nx; i++) { \
 			if ((r = sshbuf_put_cstring(m, options.x[i])) != 0) \
 				fatal_fr(r, "assemble %s", #x); \
@@ -855,6 +856,7 @@ mm_answer_pwnamallow(struct ssh *ssh, int sock, struct sshbuf *m)
 	sshbuf_reset(m);
 
 	if (pwent == NULL) {
+		invalid_user = 1;
 		if ((r = sshbuf_put_u8(m, 0)) != 0)
 			fatal_fr(r, "assemble fakepw");
 		authctxt->pw = fakepw();
@@ -1942,6 +1944,18 @@ void
 monitor_reinit(struct monitor *mon)
 {
 	monitor_openfds(mon, 0);
+}
+
+int
+monitor_auth_attempted(void)
+{
+	return auth_attempted;
+}
+
+int
+monitor_invalid_user(void)
+{
+	return invalid_user;
 }
 
 #ifdef GSSAPI

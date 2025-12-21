@@ -1,4 +1,4 @@
-/* $OpenBSD: servconf.c,v 1.437 2025/11/25 00:52:00 djm Exp $ */
+/* $OpenBSD: servconf.c,v 1.443 2025/12/19 01:26:39 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -137,6 +137,7 @@ initialize_server_options(ServerOptions *options)
 	options->kerberos_get_afs_token = -1;
 	options->gss_authentication=-1;
 	options->gss_cleanup_creds = -1;
+	options->gss_deleg_creds = -1;
 	options->gss_strict_acceptor = -1;
 	options->password_authentication = -1;
 	options->kbd_interactive_authentication = -1;
@@ -173,13 +174,14 @@ initialize_server_options(ServerOptions *options)
 	options->per_source_penalty.max_sources6 = -1;
 	options->per_source_penalty.overflow_mode = -1;
 	options->per_source_penalty.overflow_mode6 = -1;
-	options->per_source_penalty.penalty_crash = -1;
-	options->per_source_penalty.penalty_authfail = -1;
-	options->per_source_penalty.penalty_noauth = -1;
-	options->per_source_penalty.penalty_grace = -1;
-	options->per_source_penalty.penalty_refuseconnection = -1;
-	options->per_source_penalty.penalty_max = -1;
-	options->per_source_penalty.penalty_min = -1;
+	options->per_source_penalty.penalty_crash = -1.0;
+	options->per_source_penalty.penalty_authfail = -1.0;
+	options->per_source_penalty.penalty_invaliduser = -1.0;
+	options->per_source_penalty.penalty_noauth = -1.0;
+	options->per_source_penalty.penalty_grace = -1.0;
+	options->per_source_penalty.penalty_refuseconnection = -1.0;
+	options->per_source_penalty.penalty_max = -1.0;
+	options->per_source_penalty.penalty_min = -1.0;
 	options->max_authtries = -1;
 	options->max_sessions = -1;
 	options->banner = NULL;
@@ -376,6 +378,8 @@ fill_default_server_options(ServerOptions *options)
 		options->gss_authentication = 0;
 	if (options->gss_cleanup_creds == -1)
 		options->gss_cleanup_creds = 1;
+	if (options->gss_deleg_creds == -1)
+		options->gss_deleg_creds = 1;
 	if (options->gss_strict_acceptor == -1)
 		options->gss_strict_acceptor = 1;
 	if (options->password_authentication == -1)
@@ -429,20 +433,22 @@ fill_default_server_options(ServerOptions *options)
 		options->per_source_penalty.overflow_mode = PER_SOURCE_PENALTY_OVERFLOW_PERMISSIVE;
 	if (options->per_source_penalty.overflow_mode6 == -1)
 		options->per_source_penalty.overflow_mode6 = options->per_source_penalty.overflow_mode;
-	if (options->per_source_penalty.penalty_crash == -1)
-		options->per_source_penalty.penalty_crash = 90;
-	if (options->per_source_penalty.penalty_grace == -1)
-		options->per_source_penalty.penalty_grace = 10;
-	if (options->per_source_penalty.penalty_authfail == -1)
-		options->per_source_penalty.penalty_authfail = 5;
-	if (options->per_source_penalty.penalty_noauth == -1)
-		options->per_source_penalty.penalty_noauth = 1;
-	if (options->per_source_penalty.penalty_refuseconnection == -1)
-		options->per_source_penalty.penalty_refuseconnection = 10;
-	if (options->per_source_penalty.penalty_min == -1)
-		options->per_source_penalty.penalty_min = 15;
-	if (options->per_source_penalty.penalty_max == -1)
-		options->per_source_penalty.penalty_max = 600;
+	if (options->per_source_penalty.penalty_crash < 0.0)
+		options->per_source_penalty.penalty_crash = 90.0;
+	if (options->per_source_penalty.penalty_grace < 0.0)
+		options->per_source_penalty.penalty_grace = 10.0;
+	if (options->per_source_penalty.penalty_authfail < 0.0)
+		options->per_source_penalty.penalty_authfail = 5.0;
+	if (options->per_source_penalty.penalty_invaliduser < 0.0)
+		options->per_source_penalty.penalty_invaliduser = 5.0;
+	if (options->per_source_penalty.penalty_noauth < 0.0)
+		options->per_source_penalty.penalty_noauth = 1.0;
+	if (options->per_source_penalty.penalty_refuseconnection < 0.0)
+		options->per_source_penalty.penalty_refuseconnection = 10.0;
+	if (options->per_source_penalty.penalty_min < 0.0)
+		options->per_source_penalty.penalty_min = 15.0;
+	if (options->per_source_penalty.penalty_max < 0.0)
+		options->per_source_penalty.penalty_max = 600.0;
 	if (options->max_authtries == -1)
 		options->max_authtries = DEFAULT_AUTH_FAIL_MAX;
 	if (options->max_sessions == -1)
@@ -561,7 +567,7 @@ typedef enum {
 	sHostKeyAlgorithms, sPerSourceMaxStartups, sPerSourceNetBlockSize,
 	sPerSourcePenalties, sPerSourcePenaltyExemptList,
 	sClientAliveInterval, sClientAliveCountMax, sAuthorizedKeysFile,
-	sGssAuthentication, sGssCleanupCreds, sGssStrictAcceptor,
+	sGssAuthentication, sGssCleanupCreds, sGssDelegateCreds, sGssStrictAcceptor,
 	sAcceptEnv, sSetEnv, sPermitTunnel,
 	sMatch, sPermitOpen, sPermitListen, sForceCommand, sChrootDirectory,
 	sUsePrivilegeSeparation, sAllowAgentForwarding,
@@ -647,10 +653,12 @@ static struct {
 #ifdef GSSAPI
 	{ "gssapiauthentication", sGssAuthentication, SSHCFG_ALL },
 	{ "gssapicleanupcredentials", sGssCleanupCreds, SSHCFG_GLOBAL },
+	{ "gssapidelegatecredentials", sGssDelegateCreds, SSHCFG_GLOBAL },
 	{ "gssapistrictacceptorcheck", sGssStrictAcceptor, SSHCFG_GLOBAL },
 #else
 	{ "gssapiauthentication", sUnsupported, SSHCFG_ALL },
 	{ "gssapicleanupcredentials", sUnsupported, SSHCFG_GLOBAL },
+	{ "gssapidelegatecredentials", sUnsupported, SSHCFG_GLOBAL },
 	{ "gssapistrictacceptorcheck", sUnsupported, SSHCFG_GLOBAL },
 #endif
 	{ "passwordauthentication", sPasswordAuthentication, SSHCFG_ALL },
@@ -1315,6 +1323,7 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 {
 	char *str, ***chararrayptr, **charptr, *arg, *arg2, *p, *keyword;
 	int cmdline = 0, *intptr, value, value2, value3, n, port, oactive, r;
+	double dvalue, *doubleptr = NULL;
 	int ca_only = 0, found = 0;
 	SyslogFacility *log_facility_ptr;
 	LogLevel *log_level_ptr;
@@ -1648,6 +1657,10 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 		intptr = &options->gss_cleanup_creds;
 		goto parse_flag;
 
+	case sGssDelegateCreds:
+		intptr = &options->gss_deleg_creds;
+		goto parse_flag;
+
 	case sGssStrictAcceptor:
 		intptr = &options->gss_strict_acceptor;
 		goto parse_flag;
@@ -1945,8 +1958,8 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 		break;
 
 	case sSubsystem:
-		arg = argv_next(&ac, &av);
-		if (!arg || *arg == '\0')
+		if ((arg = argv_next(&ac, &av)) == NULL || *arg == '\0' ||
+		   ((arg2 = argv_next(&ac, &av)) == NULL || *arg2 == '\0'))
 			fatal("%s line %d: %s missing argument.",
 			    filename, linenum, keyword);
 		if (!*activep) {
@@ -1979,15 +1992,10 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 		    options->num_subsystems + 1,
 		    sizeof(*options->subsystem_args));
 		options->subsystem_name[options->num_subsystems] = xstrdup(arg);
-		arg = argv_next(&ac, &av);
-		if (!arg || *arg == '\0') {
-			fatal("%s line %d: Missing subsystem command.",
-			    filename, linenum);
-		}
 		options->subsystem_command[options->num_subsystems] =
-		    xstrdup(arg);
+		    xstrdup(arg2);
 		/* Collect arguments (separate to executable) */
-		arg = argv_assemble(1, &arg); /* quote command correctly */
+		arg = argv_assemble(1, &arg2); /* quote command correctly */
 		arg2 = argv_assemble(ac, av); /* rest of command */
 		xasprintf(&options->subsystem_args[options->num_subsystems],
 		    "%s%s%s", arg, *arg2 == '\0' ? "" : " ", arg2);
@@ -2085,6 +2093,8 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 			const char *q = NULL;
 
 			found = 1;
+			intptr = NULL;
+			doubleptr = NULL;
 			value = -1;
 			value2 = 0;
 			/* Allow no/yes only in first position */
@@ -2100,19 +2110,21 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 					options->per_source_penalty.enabled = value2;
 				continue;
 			} else if ((q = strprefix(arg, "crash:", 0)) != NULL) {
-				intptr = &options->per_source_penalty.penalty_crash;
+				doubleptr = &options->per_source_penalty.penalty_crash;
 			} else if ((q = strprefix(arg, "authfail:", 0)) != NULL) {
-				intptr = &options->per_source_penalty.penalty_authfail;
+				doubleptr = &options->per_source_penalty.penalty_authfail;
+			} else if ((q = strprefix(arg, "invaliduser:", 0)) != NULL) {
+				doubleptr = &options->per_source_penalty.penalty_invaliduser;
 			} else if ((q = strprefix(arg, "noauth:", 0)) != NULL) {
-				intptr = &options->per_source_penalty.penalty_noauth;
+				doubleptr = &options->per_source_penalty.penalty_noauth;
 			} else if ((q = strprefix(arg, "grace-exceeded:", 0)) != NULL) {
-				intptr = &options->per_source_penalty.penalty_grace;
+				doubleptr = &options->per_source_penalty.penalty_grace;
 			} else if ((q = strprefix(arg, "refuseconnection:", 0)) != NULL) {
-				intptr = &options->per_source_penalty.penalty_refuseconnection;
+				doubleptr = &options->per_source_penalty.penalty_refuseconnection;
 			} else if ((q = strprefix(arg, "max:", 0)) != NULL) {
-				intptr = &options->per_source_penalty.penalty_max;
+				doubleptr = &options->per_source_penalty.penalty_max;
 			} else if ((q = strprefix(arg, "min:", 0)) != NULL) {
-				intptr = &options->per_source_penalty.penalty_min;
+				doubleptr = &options->per_source_penalty.penalty_min;
 			} else if ((q = strprefix(arg, "max-sources4:", 0)) != NULL) {
 				intptr = &options->per_source_penalty.max_sources4;
 				if ((errstr = atoi_err(q, &value)) != NULL)
@@ -2139,15 +2151,24 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 				fatal("%s line %d: unsupported %s keyword %s",
 				    filename, linenum, keyword, arg);
 			}
-			/* If no value was parsed above, assume it's a time */
-			if (value == -1 && (value = convtime(q)) == -1) {
-				fatal("%s line %d: invalid %s time value.",
-				    filename, linenum, keyword);
-			}
-			if (*activep && *intptr == -1) {
-				*intptr = value;
-				/* any option implicitly enables penalties */
-				options->per_source_penalty.enabled = 1;
+
+			if (doubleptr != NULL) {
+				if ((dvalue = convtime_double(q)) < 0) {
+					fatal("%s line %d: invalid %s time value.",
+					    filename, linenum, keyword);
+				}
+				if (*activep && *doubleptr < 0.0) {
+					*doubleptr = dvalue;
+					options->per_source_penalty.enabled = 1;
+				}
+			} else if (intptr != NULL) {
+				if (*activep && *intptr == -1) {
+					*intptr = value;
+					options->per_source_penalty.enabled = 1;
+				}
+			} else {
+				fatal_f("%s line %d: internal error",
+				    filename, linenum);
 			}
 		}
 		if (!found) {
@@ -2971,7 +2992,7 @@ copy_set_server_options(ServerOptions *dst, ServerOptions *src, int preauth)
 		dst->n = xstrdup(src->n); \
 	} \
 } while(0)
-#define M_CP_STRARRAYOPT(s, num_s) do {\
+#define M_CP_STRARRAYOPT(s, num_s, clobber) do {\
 	u_int i; \
 	if (src->num_s != 0) { \
 		for (i = 0; i < dst->num_s; i++) \
@@ -2980,7 +3001,8 @@ copy_set_server_options(ServerOptions *dst, ServerOptions *src, int preauth)
 		dst->s = xcalloc(src->num_s, sizeof(*dst->s)); \
 		for (i = 0; i < src->num_s; i++) \
 			dst->s[i] = xstrdup(src->s[i]); \
-		dst->num_s = src->num_s; \
+		if (clobber) \
+			dst->num_s = src->num_s; \
 	} \
 } while(0)
 
@@ -3258,6 +3280,7 @@ dump_config(ServerOptions *o)
 #ifdef GSSAPI
 	dump_cfg_fmtint(sGssAuthentication, o->gss_authentication);
 	dump_cfg_fmtint(sGssCleanupCreds, o->gss_cleanup_creds);
+	dump_cfg_fmtint(sGssDelegateCreds, o->gss_deleg_creds);
 	dump_cfg_fmtint(sGssStrictAcceptor, o->gss_strict_acceptor);
 #endif
 	dump_cfg_fmtint(sPasswordAuthentication, o->password_authentication);
@@ -3407,13 +3430,15 @@ dump_config(ServerOptions *o)
 	printf("\n");
 
 	if (o->per_source_penalty.enabled) {
-		printf("persourcepenalties crash:%d authfail:%d noauth:%d "
-		    "grace-exceeded:%d refuseconnection:%d max:%d min:%d "
+		printf("persourcepenalties crash:%f authfail:%f noauth:%f "
+		    "invaliduser:%f "
+		    "grace-exceeded:%f refuseconnection:%f max:%f min:%f "
 		    "max-sources4:%d max-sources6:%d "
 		    "overflow:%s overflow6:%s\n",
 		    o->per_source_penalty.penalty_crash,
 		    o->per_source_penalty.penalty_authfail,
 		    o->per_source_penalty.penalty_noauth,
+		    o->per_source_penalty.penalty_invaliduser,
 		    o->per_source_penalty.penalty_grace,
 		    o->per_source_penalty.penalty_refuseconnection,
 		    o->per_source_penalty.penalty_max,
