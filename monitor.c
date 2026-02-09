@@ -1,4 +1,4 @@
-/* $OpenBSD: monitor.c,v 1.251 2025/12/19 00:56:34 djm Exp $ */
+/* $OpenBSD: monitor.c,v 1.252 2026/02/08 19:54:31 dtucker Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * Copyright 2002 Markus Friedl <markus@openbsd.org>
@@ -35,15 +35,15 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <paths.h>
+#include <poll.h>
 #include <pwd.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
-#include <stdio.h>
 #include <unistd.h>
-#include <poll.h>
 
 #ifdef WITH_OPENSSL
 #include <openssl/dh.h>
