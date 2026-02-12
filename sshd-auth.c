@@ -1,4 +1,4 @@
-/* $OpenBSD: sshd-auth.c,v 1.11 2026/02/06 01:24:36 djm Exp $ */
+/* $OpenBSD: sshd-auth.c,v 1.12 2026/02/11 17:05:32 dtucker Exp $ */
 /*
  * SSH2 implementation:
  * Privilege Separation:
@@ -32,12 +32,11 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/tree.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/time.h>
-
-#include "openbsd-compat/sys-tree.h"
-#include "openbsd-compat/sys-queue.h"
+#include <sys/queue.h>
 
 #include <errno.h>
 #include <fcntl.h>
