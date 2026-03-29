@@ -1204,7 +1204,7 @@ mm_answer_pam_query(struct ssh *ssh, int sock, struct sshbuf *m)
 		fatal_f("no context");
 	ret = (sshpam_device.query)(sshpam_ctxt, &name, &info,
 	    &num, &prompts, &echo_on);
-	if (ret == 0 && num == 0)
+	if (ret == 0 && num == 0 && sshpam_priv_kbdint_authdone(sshpam_ctxt))
 		sshpam_authok = sshpam_ctxt;
 	if (num > 1 || name == NULL || info == NULL)
 		fatal("sshpam_device.query failed");
