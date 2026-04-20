@@ -166,12 +166,12 @@ jobs:
       run: |
        sh .github/install_libcrypto.sh -a ${{ matrix.config }} /opt/openssl
        sh .github/run_test.sh ${{ matrix.config }}
-    - name: show logs
-      if: failure()
-      run: for i in regress/failed*.log; do echo ====; echo logfile $i; echo =====; cat $i; done
     - name: chown logs
       if: failure()
-      run: test -x "$(which sudo 2>&1)" && sudo chown -R "${LOGNAME}" regress
+      run: sh -c 'SUDO="$(which sudo 2>/dev/null)"; $SUDO chown -R "${LOGNAME}" regress'
+    - name: show logs
+      if: failure()
+      run: sh -c "for i in regress/failed*.log; do echo ====; echo logfile $i; echo =====; cat $i; done"
     - name: save logs
       if: failure()
       uses: actions/upload-artifact@main
