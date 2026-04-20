@@ -9,6 +9,7 @@ name: CI
 #   fail immediately.
 #
 # LTESTS: Override the set of tests run.
+# TEST_SSH_TRACE: Set to yes for additional regress output.
 
 on:
   push:
@@ -158,6 +159,7 @@ jobs:
       env:
         TEST_SSH_UNSAFE_PERMISSIONS: 1
         TEST_SSH_HOSTBASED_AUTH: yes
+        TEST_SSH_TRACE: ${{ vars.TEST_SSH_TRACE }}
         LTESTS: ${{ vars.LTESTS }}
     - name: test OpenSSL3 ABI compatibility
       if: ${{ startsWith(matrix.config, 'openssl-3') }}
