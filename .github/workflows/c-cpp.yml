@@ -95,12 +95,12 @@ jobs:
           - { target: ubuntu-latest, config: openssl-3.1.0 }
           - { target: ubuntu-latest, config: openssl-3.1.8 }
           - { target: ubuntu-latest, config: openssl-3.2.6 }
-          - { target: ubuntu-latest, config: openssl-3.3.5 }
+          - { target: ubuntu-latest, config: openssl-3.3.7 }
           - { target: ubuntu-latest, config: openssl-3.4.0 }
-          - { target: ubuntu-latest, config: openssl-3.4.3 }
+          - { target: ubuntu-latest, config: openssl-3.4.5 }
           - { target: ubuntu-latest, config: openssl-3.5.0 }
           - { target: ubuntu-latest, config: openssl-3.5.3 }  # keep
-          - { target: ubuntu-latest, config: openssl-3.5.4 }
+          - { target: ubuntu-latest, config: openssl-3.5.6 }
           - { target: ubuntu-latest, config: openssl-3.6.2 }
           - { target: ubuntu-latest, config: openssl-4.0.0 }
           - { target: ubuntu-latest, config: openssl-1.1.1_stable }
