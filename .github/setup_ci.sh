@@ -8,8 +8,8 @@ PACKAGES="tmux"
 echo Running as:
 id
 
-echo Environment:
-set
+echo Saving environment to runner-env.txt
+set >runner-env.txt
 
  . .github/configs ${config}
 
