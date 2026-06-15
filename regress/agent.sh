@@ -1,4 +1,4 @@
-#	$OpenBSD: agent.sh,v 1.24 2026/06/14 04:08:05 djm Exp $
+#	$OpenBSD: agent.sh,v 1.26 2026/06/15 06:36:52 djm Exp $
 #	Placed in the Public Domain.
 
 tid="simple agent test"
@@ -150,7 +150,7 @@ for t in ${SSH_KEYTYPES}; do
 	trace "connect via agent using $t key"
 	# Accept both keys and certs.
 	BASE=`echo $t | cut -d '@' -f1`
-	ACCEPT=`$SSH -Q key | grep "^$BASE" | paste -sd , -`
+	ACCEPT=`$SSH -Q key | grep "^$BASE" | xargs echo | sed 's/ /,/g'`
 	grep -vi PubkeyAcceptedAlgorithms $OBJ/sshd_proxy.bak > $OBJ/sshd_proxy
 	echo "PubkeyAcceptedAlgorithms=+$ACCEPT" >> $OBJ/sshd_proxy
 	grep -vi PubkeyAcceptedAlgorithms $OBJ/ssh_proxy.bak > $OBJ/ssh_proxy
@@ -215,13 +215,13 @@ if [ $r -ne 0 ]; then
 fi
 
 check_key_absent() {
-	${SSHADD} -L | grep "^$1 " >/dev/null
+	${SSHADD} -L | sed s/' .*//' | grep "^$1\$" #>/dev/null
 	if [ $? -eq 0 ]; then
 		fail "$1 key unexpectedly present"
 	fi
 }
 check_key_present() {
-	${SSHADD} -L | grep "^$1 " >/dev/null
+	${SSHADD} -L | sed s/' .*//' | grep "^$1\$" >/dev/null
 	if [ $? -ne 0 ]; then
 		fail "$1 key missing from agent"
 	fi
