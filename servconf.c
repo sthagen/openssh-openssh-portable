@@ -1,4 +1,4 @@
-/* $OpenBSD: servconf.c,v 1.449 2026/06/14 03:59:34 djm Exp $ */
+/* $OpenBSD: servconf.c,v 1.451 2026/07/07 01:00:22 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -1433,19 +1433,19 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 #endif /* KRB5 */
 
 #ifdef GSSAPI
-	case sGssAuthentication:
+	case sGSSAPIAuthentication:
 		intptr = &options->gss_authentication;
 		goto parse_flag;
 
-	case sGssCleanupCreds:
+	case sGSSAPICleanupCredentials:
 		intptr = &options->gss_cleanup_creds;
 		goto parse_flag;
 
-	case sGssDelegateCreds:
+	case sGSSAPIDelegateCredentials:
 		intptr = &options->gss_deleg_creds;
 		goto parse_flag;
 
-	case sGssStrictAcceptor:
+	case sGSSAPIStrictAcceptorCheck:
 		intptr = &options->gss_strict_acceptor;
 		goto parse_flag;
 #endif /* GSSAPI */
@@ -2166,7 +2166,7 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 				debug2("%s line %d: no match for %s",
 				    filename, linenum, arg);
 				item = xcalloc(1, sizeof(*item));
-				item->selector = strdup(arg);
+				item->selector = xstrdup(arg);
 				TAILQ_INSERT_TAIL(includes,
 				    item, entry);
 			}
@@ -2176,8 +2176,8 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 				debug2("%s line %d: including %s",
 				    filename, linenum, gbuf.gl_pathv[n]);
 				item = xcalloc(1, sizeof(*item));
-				item->selector = strdup(arg);
-				item->filename = strdup(gbuf.gl_pathv[n]);
+				item->selector = xstrdup(arg);
+				item->filename = xstrdup(gbuf.gl_pathv[n]);
 				if ((item->contents = sshbuf_new()) == NULL)
 					fatal_f("sshbuf_new failed");
 				load_server_config(item->filename,
@@ -4215,10 +4215,10 @@ dump_config(ServerOptions *o)
 # endif
 #endif
 #ifdef GSSAPI
-	dump_cfg_fmtint(sGssAuthentication, o->gss_authentication);
-	dump_cfg_fmtint(sGssCleanupCreds, o->gss_cleanup_creds);
-	dump_cfg_fmtint(sGssDelegateCreds, o->gss_deleg_creds);
-	dump_cfg_fmtint(sGssStrictAcceptor, o->gss_strict_acceptor);
+	dump_cfg_fmtint(sGSSAPIAuthentication, o->gss_authentication);
+	dump_cfg_fmtint(sGSSAPICleanupCredentials, o->gss_cleanup_creds);
+	dump_cfg_fmtint(sGSSAPIDelegateCredentials, o->gss_deleg_creds);
+	dump_cfg_fmtint(sGSSAPIStrictAcceptorCheck, o->gss_strict_acceptor);
 #endif
 	dump_cfg_fmtint(sPasswordAuthentication, o->password_authentication);
 	dump_cfg_fmtint(sKbdInteractiveAuthentication,

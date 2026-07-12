@@ -1,4 +1,4 @@
-/* $OpenBSD: sshkey.c,v 1.162 2026/06/14 03:59:34 djm Exp $ */
+/* $OpenBSD: sshkey.c,v 1.163 2026/06/29 01:58:29 djm Exp $ */
 /*
  * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.
  * Copyright (c) 2008 Alexander von Gernler.  All rights reserved.
@@ -2725,6 +2725,10 @@ sshkey_ec_validate_public(const EC_GROUP *group, const EC_POINT *public)
 			ret = SSH_ERR_ALLOC_FAIL;
 			goto out;
 		}
+		if (EC_GROUP_get_order(group, order, NULL) != 1) {
+			ret = SSH_ERR_LIBCRYPTO_ERROR;
+			goto out;
+		}
 		if ((nq = EC_POINT_new(group)) == NULL) {
 			ret = SSH_ERR_ALLOC_FAIL;
 			goto out;
@@ -3460,6 +3464,9 @@ translate_libcrypto_error(unsigned long pem_err)
 			return SSH_ERR_LIBCRYPTO_ERROR;
 		}
 	case ERR_LIB_ASN1:
+#ifdef ERR_LIB_OSSL_DECODER
+	case ERR_LIB_OSSL_DECODER:
+#endif
 		return SSH_ERR_INVALID_FORMAT;
 	}
 	return SSH_ERR_LIBCRYPTO_ERROR;
