@@ -1134,8 +1134,6 @@ mips-sony-bsd|mips-sony-newsos4)
 	AC_DEFINE([SSH_TUN_PREPEND_AF], [1],
 	    [Prepend the address family to IP tunnel traffic])
 	TEST_MALLOC_OPTIONS="AJRX"
-	AC_DEFINE([BROKEN_READ_COMPARISON], [1],
-	    [NetBSD read function is sometimes redirected, breaking atomicio comparisons against it])
 	;;
 *-*-freebsd*)
 	AC_DEFINE([LOCKED_PASSWD_PREFIX], ["*LOCKED*"], [Account locked with pw(1)])
@@ -2138,6 +2136,7 @@ AC_CHECK_FUNCS([ \
 	getaddrinfo \
 	getcwd \
 	getentropy \
+	getexecpath \
 	getgrouplist \
 	getline \
 	getnameinfo \
@@ -2169,6 +2168,7 @@ AC_CHECK_FUNCS([ \
 	nlist \
 	nsleep \
 	ogetaddrinfo \
+	openat \
 	openlog_r \
 	pledge \
 	poll \
